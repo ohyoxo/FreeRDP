@@ -134,13 +134,13 @@ extern "C"
 		                  __VA_ARGS__);                                                      \
 	} while (0)
 
-#define WLog_Print(_log, _log_level, ...)                          \
-	do                                                             \
-	{                                                              \
-		if (WLog_IsLevelActive(_log, _log_level))                  \
-		{                                                          \
-			WLog_Print_unchecked(_log, _log_level, ##__VA_ARGS__); \
-		}                                                          \
+#define WLog_Print(_log, _log_level, ...)                        \
+	do                                                           \
+	{                                                            \
+		if (WLog_IsLevelActive(_log, _log_level))                \
+		{                                                        \
+			WLog_Print_unchecked(_log, _log_level, __VA_ARGS__); \
+		}                                                        \
 	} while (0)
 
 #define WLog_Print_tag(_tag, _log_level, ...)                 \
@@ -221,9 +221,9 @@ extern "C"
 
 #if defined(WITH_WINPR_DEPRECATED)
 	/** Deprecated */
-	WINPR_API WINPR_DEPRECATED(BOOL WLog_Init(void));
+	WINPR_DEPRECATED(WINPR_API BOOL WLog_Init(void));
 	/** Deprecated */
-	WINPR_API WINPR_DEPRECATED(BOOL WLog_Uninit(void));
+	WINPR_DEPRECATED(WINPR_API BOOL WLog_Uninit(void));
 #endif
 
 	typedef BOOL (*wLogCallbackMessage_t)(const wLogMessage* msg);
