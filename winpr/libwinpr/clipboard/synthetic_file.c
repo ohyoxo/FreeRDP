@@ -22,8 +22,9 @@
 
 WINPR_PRAGMA_DIAG_PUSH
 WINPR_PRAGMA_DIAG_IGNORED_RESERVED_ID_MACRO
+WINPR_PRAGMA_DIAG_IGNORED_UNUSED_MACRO
 
-#define _FILE_OFFSET_BITS 64
+#define _FILE_OFFSET_BITS 64 // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 
 WINPR_PRAGMA_DIAG_POP
 
@@ -74,7 +75,7 @@ static struct synthetic_file* make_synthetic_file(const WCHAR* local_name, const
 {
 	struct synthetic_file* file = NULL;
 	WIN32_FIND_DATAW fd = { 0 };
-	HANDLE hFind;
+	HANDLE hFind = NULL;
 
 	WINPR_ASSERT(local_name);
 	WINPR_ASSERT(remote_name);
@@ -276,8 +277,14 @@ static BOOL add_directory_contents_to_list(wClipboard* clipboard, const WCHAR* l
                                            const WCHAR* remote_name, wArrayList* files)
 {
 	BOOL result = FALSE;
-	const WCHAR* wildcard = "/\0*\0\0\0";
-	const size_t wildcardLen = 3;
+	union
+	{
+		const char* c;
+		const WCHAR* w;
+	} wildcard;
+	const char buffer[6] = "/\0*\0\0\0";
+	wildcard.c = buffer;
+	const size_t wildcardLen = ARRAYSIZE(buffer) / sizeof(WCHAR);
 
 	WINPR_ASSERT(clipboard);
 	WINPR_ASSERT(local_name);
@@ -290,7 +297,7 @@ static BOOL add_directory_contents_to_list(wClipboard* clipboard, const WCHAR* l
 		return FALSE;
 
 	_wcsncat(namebuf, local_name, len);
-	_wcsncat(namebuf, wildcard, wildcardLen);
+	_wcsncat(namebuf, wildcard.w, wildcardLen);
 
 	result = do_add_directory_contents_to_list(clipboard, local_name, remote_name, namebuf, files);
 
@@ -409,8 +416,6 @@ static BOOL process_uri_list(wClipboard* clipboard, const char* data, size_t len
 {
 	const char* cur = data;
 	const char* lim = data + length;
-	const char* start = NULL;
-	const char* stop = NULL;
 
 	WINPR_ASSERT(clipboard);
 	WINPR_ASSERT(data);
@@ -429,9 +434,10 @@ static BOOL process_uri_list(wClipboard* clipboard, const char* data, size_t len
 	while (cur < lim)
 	{
 		BOOL comment = (*cur == '#');
-		start = cur;
+		const char* start = cur;
+		const char* stop = cur;
 
-		for (stop = cur; stop < lim; stop++)
+		for (; stop < lim; stop++)
 		{
 			if (*stop == '\r')
 			{
@@ -452,7 +458,7 @@ static BOOL process_uri_list(wClipboard* clipboard, const char* data, size_t len
 
 		if (stop == lim)
 		{
-			if (strnlen(start, stop - start) < 1)
+			if (strnlen(start, WINPR_ASSERTING_INT_CAST(size_t, stop - start)) < 1)
 				return TRUE;
 			cur = lim;
 		}
@@ -460,7 +466,7 @@ static BOOL process_uri_list(wClipboard* clipboard, const char* data, size_t len
 		if (comment)
 			continue;
 
-		if (!process_uri(clipboard, start, stop - start))
+		if (!process_uri(clipboard, start, WINPR_ASSERTING_INT_CAST(size_t, stop - start)))
 			return FALSE;
 	}
 
@@ -506,7 +512,6 @@ static BOOL convert_local_file_to_filedescriptor(const struct synthetic_file* fi
 
 static FILEDESCRIPTORW* convert_local_file_list_to_filedescriptors(wArrayList* files)
 {
-	size_t i;
 	size_t count = 0;
 	FILEDESCRIPTORW* descriptors = NULL;
 
@@ -517,7 +522,7 @@ static FILEDESCRIPTORW* convert_local_file_list_to_filedescriptors(wArrayList* f
 	if (!descriptors)
 		goto error;
 
-	for (i = 0; i < count; i++)
+	for (size_t i = 0; i < count; i++)
 	{
 		const struct synthetic_file* file = ArrayList_GetItem(files, i);
 
@@ -531,10 +536,11 @@ error:
 	return NULL;
 }
 
-static void* convert_any_uri_list_to_filedescriptors(wClipboard* clipboard, UINT32 formatId,
+static void* convert_any_uri_list_to_filedescriptors(wClipboard* clipboard,
+                                                     WINPR_ATTR_UNUSED UINT32 formatId,
                                                      UINT32* pSize)
 {
-	FILEDESCRIPTORW* descriptors;
+	FILEDESCRIPTORW* descriptors = NULL;
 
 	WINPR_ASSERT(clipboard);
 	WINPR_ASSERT(pSize);
@@ -607,22 +613,6 @@ static BOOL process_gnome_copied_files(wClipboard* clipboard, const char* data, 
 static BOOL process_mate_copied_files(wClipboard* clipboard, const char* data, UINT32 pSize)
 {
 	return process_files(clipboard, data, pSize, "copy\n");
-}
-
-static BOOL process_nautilus_clipboard(wClipboard* clipboard, const char* data, UINT32 pSize)
-{
-	return process_files(clipboard, data, pSize, "x-special/nautilus-clipboard\ncopy\n");
-}
-
-static void* convert_nautilus_clipboard_to_filedescriptors(wClipboard* clipboard, UINT32 formatId,
-                                                           const void* data, UINT32* pSize)
-{
-	const UINT32 expected = ClipboardGetFormatId(clipboard, mime_gnome_copied_files);
-	if (formatId != expected)
-		return NULL;
-	if (!process_nautilus_clipboard(clipboard, (const char*)data, *pSize))
-		return NULL;
-	return convert_any_uri_list_to_filedescriptors(clipboard, formatId, pSize);
 }
 
 static void* convert_gnome_copied_files_to_filedescriptors(wClipboard* clipboard, UINT32 formatId,
@@ -705,12 +695,15 @@ static void* convert_filedescriptors_to_file_list(wClipboard* clipboard, UINT32 
 
 	const FILEDESCRIPTORW* descriptors = NULL;
 	UINT32 nrDescriptors = 0;
-	size_t count, x, alloc, pos, baseLength = 0;
-	char* dst;
+	size_t count = 0;
+	size_t alloc = 0;
+	size_t pos = 0;
+	size_t baseLength = 0;
+	char* dst = NULL;
 	size_t header_len = strlen(header);
 	size_t lineprefix_len = strlen(lineprefix);
 	size_t lineending_len = strlen(lineending);
-	size_t decoration_len;
+	size_t decoration_len = 0;
 
 	if (!clipboard || !data || !pSize)
 		return NULL;
@@ -746,7 +739,7 @@ static void* convert_filedescriptors_to_file_list(wClipboard* clipboard, UINT32 
 	alloc = header_len;
 
 	/* Get total size of file/folder names under first level folder only */
-	for (x = 0; x < count; x++)
+	for (size_t x = 0; x < count; x++)
 	{
 		const FILEDESCRIPTORW* dsc = &descriptors[x];
 
@@ -768,11 +761,11 @@ static void* convert_filedescriptors_to_file_list(wClipboard* clipboard, UINT32 
 	if (!dst)
 		return NULL;
 
-	_snprintf(&dst[0], alloc, "%s", header);
+	(void)_snprintf(&dst[0], alloc, "%s", header);
 
 	pos = header_len;
 
-	for (x = 0; x < count; x++)
+	for (size_t x = 0; x < count; x++)
 	{
 		const FILEDESCRIPTORW* dsc = &descriptors[x];
 		BOOL fail = TRUE;
@@ -799,11 +792,13 @@ static void* convert_filedescriptors_to_file_list(wClipboard* clipboard, UINT32 
 		previous_at = curName;
 		while ((stop_at = stop_at_special_chars(previous_at)) != NULL)
 		{
-			char* tmp = strndup(previous_at, stop_at - previous_at);
+			char* tmp =
+			    strndup(previous_at, WINPR_ASSERTING_INT_CAST(size_t, stop_at - previous_at));
 			if (!tmp)
 				goto loop_fail;
 
-			rc = _snprintf(&dst[pos], stop_at - previous_at + 1, "%s", tmp);
+			rc = _snprintf(&dst[pos], WINPR_ASSERTING_INT_CAST(size_t, stop_at - previous_at + 1),
+			               "%s", tmp);
 			free(tmp);
 			if (rc < 0)
 				goto loop_fail;
@@ -877,30 +872,6 @@ static void* convert_filedescriptors_to_gnome_copied_files(wClipboard* clipboard
 	                                            "file://", "\n", TRUE);
 }
 
-/* Prepend header of nautilus based filemanager's format to file list*/
-static void* convert_filedescriptors_to_nautilus_clipboard(wClipboard* clipboard, UINT32 formatId,
-                                                           const void* data, UINT32* pSize)
-{
-	/* Here Nemo (and Caja) have different behavior. They encounter error with the last \n . but
-	   nautilus needs it. So user have to skip Nemo's error dialog to continue. Caja has different
-	   TARGET , so it's easy to fix. see convert_filedescriptors_to_mate_copied_files
-
-	   The text based "x-special/nautilus-clipboard" type was introduced with GNOME 3.30 and
-	   was necessary for the desktop icons extension, as gnome-shell at that time only
-	   supported text based mime types for gnome extensions. With GNOME 3.38, gnome-shell got
-	   support for non-text based mime types for gnome extensions. With GNOME 40, nautilus reverted
-	   the mime type change to "x-special/gnome-copied-files" and removed support for the text based
-	   mime type. So, in the near future, change this behaviour in favor for Nemo and Caja.
-	*/
-	/*	see nautilus/src/nautilus-clipboard.c:convert_selection_data_to_str_list
-	    see nemo/libnemo-private/nemo-clipboard.c:nemo_clipboard_get_uri_list_from_selection_data
-	*/
-
-	return convert_filedescriptors_to_file_list(clipboard, formatId, data, pSize,
-	                                            "x-special/nautilus-clipboard\ncopy\n", "file://",
-	                                            "\n", FALSE);
-}
-
 static void* convert_filedescriptors_to_mate_copied_files(wClipboard* clipboard, UINT32 formatId,
                                                           const void* data, UINT32* pSize)
 {
@@ -929,7 +900,7 @@ static void array_free_synthetic_file(void* the_file)
 
 static BOOL register_file_formats_and_synthesizers(wClipboard* clipboard)
 {
-	wObject* obj;
+	wObject* obj = NULL;
 
 	/*
 	    1. Gnome Nautilus based file manager (Nautilus only with version >= 3.30 AND < 40):
@@ -941,7 +912,7 @@ static BOOL register_file_formats_and_synthesizers(wClipboard* clipboard)
 	        See:
 	          GTK: https://docs.gtk.org/glib/struct.Uri.html
 	          uri syntax: https://www.rfc-editor.org/rfc/rfc3986#section-3
-	          uri-lists fomat: https://www.rfc-editor.org/rfc/rfc2483#section-5
+	          uri-lists format: https://www.rfc-editor.org/rfc/rfc2483#section-5
 	    3. Gnome and others (Unity/XFCE/Nautilus < 3.30/Nautilus >= 40):
 	        TARGET: x-special/gnome-copied-files
 	        format: copy\nfile://path\n\0
@@ -1004,7 +975,7 @@ error:
 	return FALSE;
 }
 
-static UINT file_get_size(const struct synthetic_file* file, UINT64* size)
+static int32_t file_get_size(const struct synthetic_file* file, UINT64* size)
 {
 	UINT64 s = 0;
 
@@ -1021,9 +992,7 @@ static UINT file_get_size(const struct synthetic_file* file, UINT64* size)
 static UINT delegate_file_request_size(wClipboardDelegate* delegate,
                                        const wClipboardFileSizeRequest* request)
 {
-	UINT error = NO_ERROR;
 	UINT64 size = 0;
-	struct synthetic_file* file = NULL;
 
 	if (!delegate || !delegate->clipboard || !request)
 		return ERROR_BAD_ARGUMENTS;
@@ -1031,15 +1000,16 @@ static UINT delegate_file_request_size(wClipboardDelegate* delegate,
 	if (delegate->clipboard->sequenceNumber != delegate->clipboard->fileListSequenceNumber)
 		return ERROR_INVALID_STATE;
 
-	file = ArrayList_GetItem(delegate->clipboard->localFiles, request->listIndex);
+	struct synthetic_file* file =
+	    ArrayList_GetItem(delegate->clipboard->localFiles, request->listIndex);
 
 	if (!file)
 		return ERROR_INDEX_ABSENT;
 
-	error = file_get_size(file, &size);
-
+	const int32_t s = file_get_size(file, &size);
+	uint32_t error = 0;
 	if (error)
-		error = delegate->ClipboardFileSizeFailure(delegate, request, error);
+		error = delegate->ClipboardFileSizeFailure(delegate, request, (UINT)s);
 	else
 		error = delegate->ClipboardFileSizeSuccess(delegate, request, size);
 
@@ -1078,7 +1048,6 @@ static UINT file_get_range(struct synthetic_file* file, UINT64 offset, UINT32 si
 	UINT error = NO_ERROR;
 	DWORD dwLow = 0;
 	DWORD dwHigh = 0;
-	BYTE* buffer = NULL;
 
 	WINPR_ASSERT(file);
 	WINPR_ASSERT(actual_data);
@@ -1099,8 +1068,8 @@ static UINT file_get_range(struct synthetic_file* file, UINT64 offset, UINT32 si
 
 		if (!GetFileInformationByHandle(file->fd, &FileInfo))
 		{
+			(void)CloseHandle(file->fd);
 			file->fd = INVALID_HANDLE_VALUE;
-			CloseHandle(file->fd);
 			error = GetLastError();
 			WLog_ERR(TAG, "Get file [%s] information fail: 0x%08" PRIx32, file->local_name, error);
 			return error;
@@ -1141,15 +1110,16 @@ static UINT file_get_range(struct synthetic_file* file, UINT64 offset, UINT32 si
 
 			dwHigh = offset >> 32;
 			dwLow = offset & 0xFFFFFFFF;
-			if (INVALID_SET_FILE_POINTER ==
-			    SetFilePointer(file->fd, dwLow, (PLONG)&dwHigh, FILE_BEGIN))
+			if (INVALID_SET_FILE_POINTER == SetFilePointer(file->fd,
+			                                               WINPR_ASSERTING_INT_CAST(LONG, dwLow),
+			                                               (PLONG)&dwHigh, FILE_BEGIN))
 			{
 				error = GetLastError();
 				break;
 			}
 		}
 
-		buffer = malloc(size);
+		BYTE* buffer = malloc(size);
 		if (!buffer)
 		{
 			error = ERROR_NOT_ENOUGH_MEMORY;
@@ -1157,6 +1127,7 @@ static UINT file_get_range(struct synthetic_file* file, UINT64 offset, UINT32 si
 		}
 		if (!ReadFile(file->fd, buffer, size, (LPDWORD)actual_size, NULL))
 		{
+			free(buffer);
 			error = GetLastError();
 			break;
 		}
@@ -1167,10 +1138,6 @@ static UINT file_get_range(struct synthetic_file* file, UINT64 offset, UINT32 si
 		         *actual_size, file->offset);
 	} while (0);
 
-	if (NO_ERROR != error)
-	{
-		free(buffer);
-	}
 	synthetic_file_read_close(file, TRUE /* (error != NO_ERROR) && (size > 0) */);
 	return error;
 }
@@ -1210,27 +1177,31 @@ static UINT delegate_file_request_range(wClipboardDelegate* delegate,
 	return NO_ERROR;
 }
 
-static UINT dummy_file_size_success(wClipboardDelegate* delegate,
-                                    const wClipboardFileSizeRequest* request, UINT64 fileSize)
+static UINT dummy_file_size_success(WINPR_ATTR_UNUSED wClipboardDelegate* delegate,
+                                    WINPR_ATTR_UNUSED const wClipboardFileSizeRequest* request,
+                                    WINPR_ATTR_UNUSED UINT64 fileSize)
 {
 	return ERROR_NOT_SUPPORTED;
 }
 
-static UINT dummy_file_size_failure(wClipboardDelegate* delegate,
-                                    const wClipboardFileSizeRequest* request, UINT errorCode)
+static UINT dummy_file_size_failure(WINPR_ATTR_UNUSED wClipboardDelegate* delegate,
+                                    WINPR_ATTR_UNUSED const wClipboardFileSizeRequest* request,
+                                    WINPR_ATTR_UNUSED UINT errorCode)
 {
 	return ERROR_NOT_SUPPORTED;
 }
 
-static UINT dummy_file_range_success(wClipboardDelegate* delegate,
-                                     const wClipboardFileRangeRequest* request, const BYTE* data,
-                                     UINT32 size)
+static UINT dummy_file_range_success(WINPR_ATTR_UNUSED wClipboardDelegate* delegate,
+                                     WINPR_ATTR_UNUSED const wClipboardFileRangeRequest* request,
+                                     WINPR_ATTR_UNUSED const BYTE* data,
+                                     WINPR_ATTR_UNUSED UINT32 size)
 {
 	return ERROR_NOT_SUPPORTED;
 }
 
-static UINT dummy_file_range_failure(wClipboardDelegate* delegate,
-                                     const wClipboardFileRangeRequest* request, UINT errorCode)
+static UINT dummy_file_range_failure(WINPR_ATTR_UNUSED wClipboardDelegate* delegate,
+                                     WINPR_ATTR_UNUSED const wClipboardFileRangeRequest* request,
+                                     WINPR_ATTR_UNUSED UINT errorCode)
 {
 	return ERROR_NOT_SUPPORTED;
 }

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SCM_URL=https://github.com/DaveGamble/cJSON/archive
-SCM_TAG=v1.7.15
+SCM_TAG=v1.7.18
 SCM_HASH=451131a92c55efc5457276807fc0c4c2c2707c9ee96ef90c47d68852d5384c6c
 
 source $(dirname "${BASH_SOURCE[0]}")/android-build-common.sh
@@ -22,20 +22,19 @@ CMAKE_CMD_ARGS="-DANDROID_NDK=$ANDROID_NDK \
 	-DCMAKE_MAKE_PROGRAM=make"
 
 BASE=$(pwd)
-for ARCH in $BUILD_ARCH
-do
-	common_run cd $BASE
-	common_run mkdir -p $BUILD_SRC/cJSON-build/$ARCH
-	common_run cd $BUILD_SRC/cJSON-build/$ARCH
-	common_run export ANDROID_NDK=$ANDROID_NDK
-	common_run $CMAKE_PROGRAM $CMAKE_CMD_ARGS \
-		-DANDROID_ABI=$ARCH \
-		-DCMAKE_INSTALL_PREFIX=$BUILD_DST/$ARCH \
-		-DCMAKE_INSTALL_LIBDIR=. \
-		-B . \
-		-S $BUILD_SRC
-	echo $(pwd)
-	common_run $CMAKE_PROGRAM --build . --target install
+for ARCH in $BUILD_ARCH; do
+  common_run cd $BASE
+  common_run mkdir -p $BUILD_SRC/cJSON-build/$ARCH
+  common_run cd $BUILD_SRC/cJSON-build/$ARCH
+  common_run export ANDROID_NDK=$ANDROID_NDK
+  common_run $CMAKE_PROGRAM $CMAKE_CMD_ARGS \
+    -DANDROID_ABI=$ARCH \
+    -DCMAKE_INSTALL_PREFIX=$BUILD_DST/$ARCH \
+    -DCMAKE_INSTALL_LIBDIR=. \
+    -B . \
+    -S $BUILD_SRC
+  echo $(pwd)
+  common_run $CMAKE_PROGRAM --build . --target install
 done
 
 echo "Successfully build library for architectures $BUILD_ARCH"
