@@ -1,0 +1,18 @@
+{
+	"build-commands": [
+		"./config --prefix=/app --openssldir=/app --libdir=lib shared",
+		"make -j build_sw",
+		"make -j install_sw"
+	],
+	"buildsystem": "simple",
+	"cleanup": [],
+	"name": "openssl",
+	"sources": [
+		{
+			"sha256": "002a2d6b30b58bf4bea46c43bdd96365aaf8daa6c428782aa4feee06da197df3",
+			"type": "archive",
+			"url":
+			    "https://github.com/openssl/openssl/releases/download/openssl-3.4.1/openssl-3.4.1.tar.gz"
+		}
+	]
+}

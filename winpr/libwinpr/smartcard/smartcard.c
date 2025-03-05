@@ -54,7 +54,7 @@ static const SCardApiFunctionTable* g_SCardApi = NULL;
 	}                                                                                    \
 	return g_SCardApi->pfn##_name(__VA_ARGS__)
 
-#define SCARDAPI_STUB_CALL_HANDLE(_name, ...)                                            \
+#define SCARDAPI_STUB_CALL_HANDLE(_name)                                                 \
 	InitOnceExecuteOnce(&g_Initialized, InitializeSCardApiStubs, NULL, NULL);            \
 	if (!g_SCardApi || !g_SCardApi->pfn##_name)                                          \
 	{                                                                                    \
@@ -62,9 +62,9 @@ static const SCardApiFunctionTable* g_SCardApi = NULL;
 		         g_SCardApi, g_SCardApi ? g_SCardApi->pfn##_name : NULL);                \
 		return NULL;                                                                     \
 	}                                                                                    \
-	return g_SCardApi->pfn##_name(__VA_ARGS__)
+	return g_SCardApi->pfn##_name()
 
-#define SCARDAPI_STUB_CALL_VOID(_name, ...)                                              \
+#define SCARDAPI_STUB_CALL_VOID(_name)                                                   \
 	InitOnceExecuteOnce(&g_Initialized, InitializeSCardApiStubs, NULL, NULL);            \
 	if (!g_SCardApi || !g_SCardApi->pfn##_name)                                          \
 	{                                                                                    \
@@ -72,7 +72,7 @@ static const SCardApiFunctionTable* g_SCardApi = NULL;
 		         g_SCardApi, g_SCardApi ? g_SCardApi->pfn##_name : NULL);                \
 		return;                                                                          \
 	}                                                                                    \
-	g_SCardApi->pfn##_name(__VA_ARGS__)
+	g_SCardApi->pfn##_name()
 
 /**
  * Standard Windows Smart Card API
@@ -82,7 +82,9 @@ const SCARD_IO_REQUEST g_rgSCardT0Pci = { SCARD_PROTOCOL_T0, 8 };
 const SCARD_IO_REQUEST g_rgSCardT1Pci = { SCARD_PROTOCOL_T1, 8 };
 const SCARD_IO_REQUEST g_rgSCardRawPci = { SCARD_PROTOCOL_RAW, 8 };
 
-static BOOL CALLBACK InitializeSCardApiStubs(PINIT_ONCE once, PVOID param, PVOID* context)
+static BOOL CALLBACK InitializeSCardApiStubs(WINPR_ATTR_UNUSED PINIT_ONCE once,
+                                             WINPR_ATTR_UNUSED PVOID param,
+                                             WINPR_ATTR_UNUSED PVOID* context)
 {
 #ifdef _WIN32
 	if (Windows_InitializeSCardApi() >= 0)
@@ -1100,13 +1102,13 @@ WINSCARDAPI char* WINAPI SCardGetReaderStateString(DWORD dwReaderState)
 	return buffer;
 }
 
-#define WINSCARD_LOAD_PROC(_name, ...)                                                       \
-	do                                                                                       \
-	{                                                                                        \
-		WINPR_PRAGMA_DIAG_PUSH                                                               \
-		WINPR_PRAGMA_DIAG_IGNORED_PEDANTIC                                                   \
-		pWinSCardApiTable->pfn##_name = (fn##_name)GetProcAddress(hWinSCardLibrary, #_name); \
-		WINPR_PRAGMA_DIAG_POP                                                                \
+#define WINSCARD_LOAD_PROC(_name)                                                              \
+	do                                                                                         \
+	{                                                                                          \
+		WINPR_PRAGMA_DIAG_PUSH                                                                 \
+		WINPR_PRAGMA_DIAG_IGNORED_PEDANTIC                                                     \
+		pWinSCardApiTable->pfn##_name = GetProcAddressAs(hWinSCardLibrary, #_name, fn##_name); \
+		WINPR_PRAGMA_DIAG_POP                                                                  \
 	} while (0)
 
 BOOL WinSCard_LoadApiTableFunctions(PSCardApiFunctionTable pWinSCardApiTable,

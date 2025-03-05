@@ -102,7 +102,8 @@ BOOL InitializeCriticalSectionAndSpinCount(LPCRITICAL_SECTION lpCriticalSection,
 	return InitializeCriticalSectionEx(lpCriticalSection, dwSpinCount, 0);
 }
 
-DWORD SetCriticalSectionSpinCount(LPCRITICAL_SECTION lpCriticalSection, DWORD dwSpinCount)
+DWORD SetCriticalSectionSpinCount(WINPR_ATTR_UNUSED LPCRITICAL_SECTION lpCriticalSection,
+                                  WINPR_ATTR_UNUSED DWORD dwSpinCount)
 {
 	WINPR_ASSERT(lpCriticalSection);
 #if !defined(WINPR_CRITICAL_SECTION_DISABLE_SPINCOUNT)
@@ -121,11 +122,12 @@ DWORD SetCriticalSectionSpinCount(LPCRITICAL_SECTION lpCriticalSection, DWORD dw
 	lpCriticalSection->SpinCount = dwSpinCount;
 	return dwPreviousSpinCount;
 #else
+	// WLog_ERR("TODO", "TODO: implement");
 	return 0;
 #endif
 }
 
-static VOID _WaitForCriticalSection(LPCRITICAL_SECTION lpCriticalSection)
+static VOID WaitForCriticalSection(LPCRITICAL_SECTION lpCriticalSection)
 {
 	WINPR_ASSERT(lpCriticalSection);
 #if defined(__APPLE__)
@@ -135,7 +137,7 @@ static VOID _WaitForCriticalSection(LPCRITICAL_SECTION lpCriticalSection)
 #endif
 }
 
-static VOID _UnWaitCriticalSection(LPCRITICAL_SECTION lpCriticalSection)
+static VOID UnWaitCriticalSection(LPCRITICAL_SECTION lpCriticalSection)
 {
 	WINPR_ASSERT(lpCriticalSection);
 #if defined __APPLE__
@@ -192,7 +194,7 @@ VOID EnterCriticalSection(LPCRITICAL_SECTION lpCriticalSection)
 		}
 
 		/* Section is locked by another thread. We have to wait. */
-		_WaitForCriticalSection(lpCriticalSection);
+		WaitForCriticalSection(lpCriticalSection);
 	}
 
 	/* We got the lock. Own it ... */
@@ -239,12 +241,12 @@ VOID LeaveCriticalSection(LPCRITICAL_SECTION lpCriticalSection)
 		if (InterlockedDecrement(&lpCriticalSection->LockCount) >= 0)
 		{
 			/* ...signal the semaphore to unblock the next waiting thread */
-			_UnWaitCriticalSection(lpCriticalSection);
+			UnWaitCriticalSection(lpCriticalSection);
 		}
 	}
 	else
 	{
-		InterlockedDecrement(&lpCriticalSection->LockCount);
+		(void)InterlockedDecrement(&lpCriticalSection->LockCount);
 	}
 }
 

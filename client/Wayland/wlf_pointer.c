@@ -39,7 +39,7 @@ static BOOL wlf_Pointer_New(rdpContext* context, rdpPointer* pointer)
 	if (!ptr)
 		return FALSE;
 
-	ptr->size = pointer->width * pointer->height * 4ULL;
+	ptr->size = 4ULL * pointer->width * pointer->height;
 	ptr->data = winpr_aligned_malloc(ptr->size, 16);
 
 	if (!ptr->data)
@@ -70,26 +70,25 @@ static BOOL wlf_Pointer_Set(rdpContext* context, rdpPointer* pointer)
 {
 	wlfContext* wlf = (wlfContext*)context;
 	wlfPointer* ptr = (wlfPointer*)pointer;
-	void* data;
-	UINT32 w, h, x, y;
-	size_t size;
-	UwacReturnCode rc;
+	void* data = NULL;
+	size_t size = 0;
+	UwacReturnCode rc = UWAC_ERROR_INTERNAL;
 	BOOL res = FALSE;
 	RECTANGLE_16 area;
 
 	if (!wlf || !wlf->seat)
 		return FALSE;
 
-	x = pointer->xPos;
-	y = pointer->yPos;
-	w = pointer->width;
-	h = pointer->height;
+	UINT32 x = pointer->xPos;
+	UINT32 y = pointer->yPos;
+	UINT32 w = pointer->width;
+	UINT32 h = pointer->height;
 
 	if (!wlf_scale_coordinates(context, &x, &y, FALSE) ||
 	    !wlf_scale_coordinates(context, &w, &h, FALSE))
 		return FALSE;
 
-	size = w * h * 4ULL;
+	size = 4ULL * w * h;
 	data = malloc(size);
 
 	if (!data)
@@ -100,8 +99,8 @@ static BOOL wlf_Pointer_Set(rdpContext* context, rdpPointer* pointer)
 	area.right = (UINT16)pointer->width;
 	area.bottom = (UINT16)pointer->height;
 
-	if (!wlf_copy_image(ptr->data, pointer->width * 4, pointer->width, pointer->height, data, w * 4,
-	                    w, h, &area,
+	if (!wlf_copy_image(ptr->data, 4ULL * pointer->width, pointer->width, pointer->height, data,
+	                    4ULL * w, w, h, &area,
 	                    freerdp_settings_get_bool(context->settings, FreeRDP_SmartSizing)))
 		goto fail;
 
@@ -141,10 +140,11 @@ static BOOL wlf_Pointer_SetDefault(rdpContext* context)
 	return TRUE;
 }
 
-static BOOL wlf_Pointer_SetPosition(rdpContext* context, UINT32 x, UINT32 y)
+static BOOL wlf_Pointer_SetPosition(WINPR_ATTR_UNUSED rdpContext* context,
+                                    WINPR_ATTR_UNUSED UINT32 x, WINPR_ATTR_UNUSED UINT32 y)
 {
 	// TODO
-	WLog_WARN(TAG, "not implemented");
+	WLog_ERR(TAG, "TODO: implement");
 	return TRUE;
 }
 

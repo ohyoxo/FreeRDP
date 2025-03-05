@@ -25,24 +25,18 @@
 
 #include <winpr/file.h>
 
-#include "../../log.h"
-#define TAG WINPR_TAG("utils.wlog")
-
 BOOL WLog_DataMessage_Write(const char* filename, const void* data, size_t length)
 {
-	FILE* fp;
+	FILE* fp = NULL;
 	BOOL ret = TRUE;
 
 	fp = winpr_fopen(filename, "w+b");
 
 	if (!fp)
-	{
-		// WLog_ERR(TAG, "failed to open file %s", filename);
 		return FALSE;
-	}
 
 	if (fwrite(data, length, 1, fp) != 1)
 		ret = FALSE;
-	fclose(fp);
+	(void)fclose(fp);
 	return ret;
 }

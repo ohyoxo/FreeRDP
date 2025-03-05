@@ -125,16 +125,13 @@ static const char* pf_modules_get_hook_type_string(PF_HOOK_TYPE result)
 static BOOL pf_modules_proxy_ArrayList_ForEachFkt(void* data, size_t index, va_list ap)
 {
 	proxyPlugin* plugin = (proxyPlugin*)data;
-	PF_HOOK_TYPE type;
-	proxyData* pdata;
-	void* custom;
 	BOOL ok = FALSE;
 
 	WINPR_UNUSED(index);
 
-	type = va_arg(ap, PF_HOOK_TYPE);
-	pdata = va_arg(ap, proxyData*);
-	custom = va_arg(ap, void*);
+	PF_HOOK_TYPE type = va_arg(ap, PF_HOOK_TYPE);
+	proxyData* pdata = va_arg(ap, proxyData*);
+	void* custom = va_arg(ap, void*);
 
 	WLog_VRB(TAG, "running hook %s.%s", plugin->name, pf_modules_get_hook_type_string(type));
 
@@ -237,16 +234,13 @@ BOOL pf_modules_run_hook(proxyModule* module, PF_HOOK_TYPE type, proxyData* pdat
 static BOOL pf_modules_ArrayList_ForEachFkt(void* data, size_t index, va_list ap)
 {
 	proxyPlugin* plugin = (proxyPlugin*)data;
-	PF_FILTER_TYPE type;
-	proxyData* pdata;
-	void* param;
 	BOOL result = FALSE;
 
 	WINPR_UNUSED(index);
 
-	type = va_arg(ap, PF_FILTER_TYPE);
-	pdata = va_arg(ap, proxyData*);
-	param = va_arg(ap, void*);
+	PF_FILTER_TYPE type = va_arg(ap, PF_FILTER_TYPE);
+	proxyData* pdata = va_arg(ap, proxyData*);
+	void* param = va_arg(ap, void*);
 
 	WLog_VRB(TAG, "running filter: %s", plugin->name);
 
@@ -338,8 +332,8 @@ BOOL pf_modules_run_filter(proxyModule* module, PF_FILTER_TYPE type, proxyData* 
  * @context: current session server's rdpContext instance.
  * @info: pointer to per-session data.
  */
-static BOOL pf_modules_set_plugin_data(proxyPluginsManager* mgr, const char* plugin_name,
-                                       proxyData* pdata, void* data)
+static BOOL pf_modules_set_plugin_data(WINPR_ATTR_UNUSED proxyPluginsManager* mgr,
+                                       const char* plugin_name, proxyData* pdata, void* data)
 {
 	union
 	{
@@ -369,8 +363,8 @@ static BOOL pf_modules_set_plugin_data(proxyPluginsManager* mgr, const char* plu
  * if there's no data related to `plugin_name` in `context` (current session), a NULL will be
  * returned.
  */
-static void* pf_modules_get_plugin_data(proxyPluginsManager* mgr, const char* plugin_name,
-                                        proxyData* pdata)
+static void* pf_modules_get_plugin_data(WINPR_ATTR_UNUSED proxyPluginsManager* mgr,
+                                        const char* plugin_name, proxyData* pdata)
 {
 	union
 	{
@@ -384,7 +378,7 @@ static void* pf_modules_get_plugin_data(proxyPluginsManager* mgr, const char* pl
 	return HashTable_GetItemValue(pdata->modules_info, ccharconv.cp);
 }
 
-static void pf_modules_abort_connect(proxyPluginsManager* mgr, proxyData* pdata)
+static void pf_modules_abort_connect(WINPR_ATTR_UNUSED proxyPluginsManager* mgr, proxyData* pdata)
 {
 	WINPR_ASSERT(pdata);
 	WLog_DBG(TAG, "is called!");
@@ -472,7 +466,7 @@ static BOOL pf_modules_print_ArrayList_ForEachFkt(void* data, size_t index, va_l
 
 void pf_modules_list_loaded_plugins(proxyModule* module)
 {
-	size_t count;
+	size_t count = 0;
 
 	WINPR_ASSERT(module);
 	WINPR_ASSERT(module->plugins);
@@ -487,11 +481,9 @@ void pf_modules_list_loaded_plugins(proxyModule* module)
 
 static BOOL pf_modules_load_module(const char* module_path, proxyModule* module, void* userdata)
 {
-	HMODULE handle = NULL;
-	proxyModuleEntryPoint pEntryPoint;
 	WINPR_ASSERT(module);
 
-	handle = LoadLibraryX(module_path);
+	HANDLE handle = LoadLibraryX(module_path);
 
 	if (handle == NULL)
 	{
@@ -499,7 +491,8 @@ static BOOL pf_modules_load_module(const char* module_path, proxyModule* module,
 		return FALSE;
 	}
 
-	pEntryPoint = (proxyModuleEntryPoint)GetProcAddress(handle, MODULE_ENTRY_POINT);
+	proxyModuleEntryPoint pEntryPoint =
+	    GetProcAddressAs(handle, MODULE_ENTRY_POINT, proxyModuleEntryPoint);
 	if (!pEntryPoint)
 	{
 		WLog_ERR(TAG, "GetProcAddress failed while loading %s", module_path);
@@ -547,8 +540,7 @@ static void* new_plugin(const void* obj)
 
 proxyModule* pf_modules_new(const char* root_dir, const char** modules, size_t count)
 {
-	size_t i;
-	wObject* obj;
+	wObject* obj = NULL;
 	char* path = NULL;
 	proxyModule* module = calloc(1, sizeof(proxyModule));
 	if (!module)
@@ -600,12 +592,12 @@ proxyModule* pf_modules_new(const char* root_dir, const char** modules, size_t c
 		if (winpr_PathFileExists(path))
 			WLog_DBG(TAG, "modules root directory: %s", path);
 
-		for (i = 0; i < count; i++)
+		for (size_t i = 0; i < count; i++)
 		{
 			char name[8192] = { 0 };
-			char* fullpath;
-			_snprintf(name, sizeof(name), "proxy-%s-plugin%s", modules[i],
-			          FREERDP_SHARED_LIBRARY_SUFFIX);
+			char* fullpath = NULL;
+			(void)_snprintf(name, sizeof(name), "proxy-%s-plugin%s", modules[i],
+			                FREERDP_SHARED_LIBRARY_SUFFIX);
 			fullpath = GetCombinedPath(path, name);
 			pf_modules_load_module(fullpath, module, NULL);
 			free(fullpath);

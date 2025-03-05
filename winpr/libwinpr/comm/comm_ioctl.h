@@ -22,8 +22,6 @@
 #ifndef WINPR_COMM_IOCTL_H_
 #define WINPR_COMM_IOCTL_H_
 
-#if defined __linux__ && !defined ANDROID
-
 #include <termios.h>
 
 #include <winpr/io.h>
@@ -81,8 +79,8 @@ extern "C"
 	{
 		ULONG ControlHandShake;
 		ULONG FlowReplace;
-		LONG XonLimit;
-		LONG XoffLimit;
+		ULONG XonLimit;
+		ULONG XoffLimit;
 	} SERIAL_HANDFLOW, *PSERIAL_HANDFLOW;
 
 #define SERIAL_DTR_MASK ((ULONG)0x03)
@@ -225,12 +223,10 @@ extern "C"
 
 	} SERIAL_DRIVER;
 
-	int _comm_ioctl_tcsetattr(int fd, int optional_actions, const struct termios* termios_p);
+	int comm_ioctl_tcsetattr(int fd, int optional_actions, const struct termios* termios_p);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __linux__ */
 
 #endif /* WINPR_COMM_IOCTL_H_ */
