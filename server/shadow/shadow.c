@@ -54,7 +54,7 @@ int main(int argc, char** argv)
 		  "maximum connections allowed to server, 0 to deactivate" },
 		{ "rect", COMMAND_LINE_VALUE_REQUIRED, "<x,y,w,h>", NULL, NULL, -1, NULL,
 		  "Select rectangle within monitor to share" },
-		{ "auth", COMMAND_LINE_VALUE_BOOL, NULL, BoolValueFalse, NULL, -1, NULL,
+		{ "auth", COMMAND_LINE_VALUE_BOOL, NULL, BoolValueTrue, NULL, -1, NULL,
 		  "Clients must authenticate" },
 		{ "remote-guard", COMMAND_LINE_VALUE_BOOL, NULL, BoolValueFalse, NULL, -1, NULL,
 		  "Remote credential guard" },
@@ -80,6 +80,11 @@ int main(int argc, char** argv)
 		  "Kerberos host ccache file for NLA authentication" },
 		{ "tls-secrets-file", COMMAND_LINE_VALUE_REQUIRED, "<file>", NULL, NULL, -1, NULL,
 		  "file where tls secrets shall be stored" },
+		{ "nsc", COMMAND_LINE_VALUE_BOOL, NULL, BoolValueTrue, NULL, -1, NULL, "Allow NSC codec" },
+		{ "rfx", COMMAND_LINE_VALUE_BOOL, NULL, BoolValueTrue, NULL, -1, NULL,
+		  "Allow RFX surface bits" },
+		{ "gfx", COMMAND_LINE_VALUE_BOOL, NULL, BoolValueTrue, NULL, -1, NULL,
+		  "Allow GFX pipeline" },
 		{ "gfx-progressive", COMMAND_LINE_VALUE_BOOL, NULL, BoolValueTrue, NULL, -1, NULL,
 		  "Allow GFX progressive codec" },
 		{ "gfx-rfx", COMMAND_LINE_VALUE_BOOL, NULL, BoolValueTrue, NULL, -1, NULL,
@@ -90,6 +95,8 @@ int main(int argc, char** argv)
 		  "Allow GFX AVC420 codec" },
 		{ "gfx-avc444", COMMAND_LINE_VALUE_BOOL, NULL, BoolValueTrue, NULL, -1, NULL,
 		  "Allow GFX AVC444 codec" },
+		{ "bitmap-compat", COMMAND_LINE_VALUE_BOOL, NULL, BoolValueFalse, NULL, -1, NULL,
+		  "Limit BitmapUpdate to 1 rectangle (fixes broken windows 11 24H2 clients)" },
 		{ "version", COMMAND_LINE_VALUE_FLAG | COMMAND_LINE_PRINT_VERSION, NULL, NULL, NULL, -1,
 		  NULL, "Print version" },
 		{ "buildconfig", COMMAND_LINE_VALUE_FLAG | COMMAND_LINE_PRINT_BUILDCONFIG, NULL, NULL, NULL,
@@ -124,6 +131,8 @@ int main(int argc, char** argv)
 	if (!freerdp_settings_set_uint32(settings, FreeRDP_ColorDepth, 32) ||
 	    !freerdp_settings_set_bool(settings, FreeRDP_NSCodec, TRUE) ||
 	    !freerdp_settings_set_bool(settings, FreeRDP_RemoteFxCodec, TRUE) ||
+	    !freerdp_settings_set_bool(settings, FreeRDP_RemoteFxImageCodec, TRUE) ||
+	    !freerdp_settings_set_uint32(settings, FreeRDP_RemoteFxRlgrMode, RLGR3) ||
 	    !freerdp_settings_set_bool(settings, FreeRDP_GfxH264, TRUE) ||
 	    !freerdp_settings_set_bool(settings, FreeRDP_GfxAVC444, TRUE) ||
 	    !freerdp_settings_set_bool(settings, FreeRDP_GfxAVC444v2, TRUE) ||
@@ -165,7 +174,7 @@ int main(int argc, char** argv)
 	}
 #endif
 
-	WaitForSingleObject(server->thread, INFINITE);
+	(void)WaitForSingleObject(server->thread, INFINITE);
 
 	if (!GetExitCodeThread(server->thread, &dwExitCode))
 		status = -1;

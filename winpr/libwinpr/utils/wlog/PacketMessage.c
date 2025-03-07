@@ -29,26 +29,10 @@
 #include <winpr/crt.h>
 #include <winpr/file.h>
 #include <winpr/stream.h>
+#include <winpr/sysinfo.h>
 
 #include "../../log.h"
 #define TAG WINPR_TAG("utils.wlog")
-
-#ifndef _WIN32
-#include <sys/time.h>
-#else
-#include <time.h>
-#include <sys/timeb.h>
-#include <winpr/windows.h>
-
-static int gettimeofday(struct timeval* tp, void* tz)
-{
-	struct _timeb timebuffer;
-	_ftime(&timebuffer);
-	tp->tv_sec = (long)timebuffer.time;
-	tp->tv_usec = timebuffer.millitm * 1000;
-	return 0;
-}
-#endif
 
 static BOOL Pcap_Read_Header(wPcap* pcap, wPcapHeader* header)
 {
@@ -56,106 +40,6 @@ static BOOL Pcap_Read_Header(wPcap* pcap, wPcapHeader* header)
 		return TRUE;
 	return FALSE;
 }
-
-/* currently unused code */
-#if 0
-static BOOL Pcap_Read_RecordHeader(wPcap* pcap, wPcapRecordHeader* record)
-{
-	if (pcap && pcap->fp && (fread((void*) record, sizeof(wPcapRecordHeader), 1, pcap->fp) == 1))
-		return TRUE;
-	return FALSE;
-}
-
-static BOOL Pcap_Read_Record(wPcap* pcap, wPcapRecord* record)
-{
-	if (pcap && pcap->fp)
-	{
-		if (!Pcap_Read_RecordHeader(pcap, &record->header))
-			return FALSE;
-		record->length = record->header.incl_len;
-		record->data = malloc(record->length);
-		if (!record->data)
-			return FALSE;
-		if (fread(record->data, record->length, 1, pcap->fp) != 1)
-		{
-			free(record->data);
-			record->length = 0;
-			record->data = NULL;
-			return FALSE;
-		}
-	}
-	return TRUE;
-}
-
-static BOOL Pcap_Add_Record(wPcap* pcap, void* data, UINT32 length)
-{
-	wPcapRecord* record;
-	struct timeval tp;
-
-	if (!pcap->tail)
-	{
-		pcap->tail = (wPcapRecord*) calloc(1, sizeof(wPcapRecord));
-		if (!pcap->tail)
-			return FALSE;
-		pcap->head = pcap->tail;
-		pcap->record = pcap->head;
-		record = pcap->tail;
-	}
-	else
-	{
-		record = (wPcapRecord*) calloc(1, sizeof(wPcapRecord));
-		if (!record)
-			return FALSE;
-		pcap->tail->next = record;
-		pcap->tail = record;
-	}
-
-	if (!pcap->record)
-		pcap->record = record;
-
-	record->data = data;
-	record->length = length;
-	record->header.incl_len = length;
-	record->header.orig_len = length;
-	gettimeofday(&tp, 0);
-	record->header.ts_sec = tp.tv_sec;
-	record->header.ts_usec = tp.tv_usec;
-	return TRUE;
-}
-
-static BOOL Pcap_HasNext_Record(wPcap* pcap)
-{
-	if (pcap->file_size - (_ftelli64(pcap->fp)) <= 16)
-		return FALSE;
-
-	return TRUE;
-}
-
-static BOOL Pcap_GetNext_RecordHeader(wPcap* pcap, wPcapRecord* record)
-{
-	if (!Pcap_HasNext_Record(pcap) || !Pcap_Read_RecordHeader(pcap, &record->header))
-		return FALSE;
-
-	record->length = record->header.incl_len;
-	return TRUE;
-}
-
-static BOOL Pcap_GetNext_RecordContent(wPcap* pcap, wPcapRecord* record)
-{
-	if (pcap && pcap->fp && fread(record->data, record->length, 1, pcap->fp) == 1)
-		return TRUE;
-
-	return FALSE;
-}
-
-static BOOL Pcap_GetNext_Record(wPcap* pcap, wPcapRecord* record)
-{
-	if (!Pcap_HasNext_Record(pcap))
-		return FALSE;
-
-	return Pcap_Read_Record(pcap, record);
-}
-#endif
 
 static BOOL Pcap_Write_Header(wPcap* pcap, wPcapHeader* header)
 {
@@ -233,7 +117,7 @@ wPcap* Pcap_Open(char* name, BOOL write)
 
 out_fail:
 	if (pcap_fp)
-		fclose(pcap_fp);
+		(void)fclose(pcap_fp);
 	free(pcap);
 	return NULL;
 }
@@ -250,8 +134,7 @@ void Pcap_Flush(wPcap* pcap)
 		pcap->record = pcap->record->next;
 	}
 
-	fflush(pcap->fp);
-	return;
+	(void)fflush(pcap->fp);
 }
 
 void Pcap_Close(wPcap* pcap)
@@ -260,13 +143,13 @@ void Pcap_Close(wPcap* pcap)
 		return;
 
 	Pcap_Flush(pcap);
-	fclose(pcap->fp);
+	(void)fclose(pcap->fp);
 	free(pcap);
 }
 
 static BOOL WLog_PacketMessage_Write_EthernetHeader(wPcap* pcap, wEthernetHeader* ethernet)
 {
-	wStream* s;
+	wStream* s = NULL;
 	wStream sbuffer = { 0 };
 	BYTE buffer[14] = { 0 };
 	BOOL ret = TRUE;
@@ -286,14 +169,13 @@ static BOOL WLog_PacketMessage_Write_EthernetHeader(wPcap* pcap, wEthernetHeader
 	return ret;
 }
 
-static UINT16 IPv4Checksum(BYTE* ipv4, int length)
+static UINT16 IPv4Checksum(const BYTE* ipv4, int length)
 {
-	UINT16 tmp16;
 	long checksum = 0;
 
 	while (length > 1)
 	{
-		tmp16 = *((UINT16*)ipv4);
+		const UINT16 tmp16 = *((const UINT16*)ipv4);
 		checksum += tmp16;
 		length -= 2;
 		ipv4 += 2;
@@ -310,7 +192,7 @@ static UINT16 IPv4Checksum(BYTE* ipv4, int length)
 
 static BOOL WLog_PacketMessage_Write_IPv4Header(wPcap* pcap, wIPv4Header* ipv4)
 {
-	wStream* s;
+	wStream* s = NULL;
 	wStream sbuffer = { 0 };
 	BYTE buffer[20] = { 0 };
 	int ret = TRUE;
@@ -321,11 +203,11 @@ static BOOL WLog_PacketMessage_Write_IPv4Header(wPcap* pcap, wIPv4Header* ipv4)
 	s = Stream_StaticInit(&sbuffer, buffer, sizeof(buffer));
 	if (!s)
 		return FALSE;
-	Stream_Write_UINT8(s, (ipv4->Version << 4) | ipv4->InternetHeaderLength);
+	Stream_Write_UINT8(s, (BYTE)((ipv4->Version << 4) | ipv4->InternetHeaderLength));
 	Stream_Write_UINT8(s, ipv4->TypeOfService);
 	Stream_Write_UINT16_BE(s, ipv4->TotalLength);
 	Stream_Write_UINT16_BE(s, ipv4->Identification);
-	Stream_Write_UINT16_BE(s, (ipv4->InternetProtocolFlags << 13) | ipv4->FragmentOffset);
+	Stream_Write_UINT16_BE(s, (UINT16)((ipv4->InternetProtocolFlags << 13) | ipv4->FragmentOffset));
 	Stream_Write_UINT8(s, ipv4->TimeToLive);
 	Stream_Write_UINT8(s, ipv4->Protocol);
 	Stream_Write_UINT16(s, ipv4->HeaderChecksum);
@@ -343,7 +225,7 @@ static BOOL WLog_PacketMessage_Write_IPv4Header(wPcap* pcap, wIPv4Header* ipv4)
 
 static BOOL WLog_PacketMessage_Write_TcpHeader(wPcap* pcap, wTcpHeader* tcp)
 {
-	wStream* s;
+	wStream* s = NULL;
 	wStream sbuffer = { 0 };
 	BYTE buffer[20] = { 0 };
 	BOOL ret = TRUE;
@@ -358,7 +240,7 @@ static BOOL WLog_PacketMessage_Write_TcpHeader(wPcap* pcap, wTcpHeader* tcp)
 	Stream_Write_UINT16_BE(s, tcp->DestinationPort);
 	Stream_Write_UINT32_BE(s, tcp->SequenceNumber);
 	Stream_Write_UINT32_BE(s, tcp->AcknowledgementNumber);
-	Stream_Write_UINT8(s, (tcp->Offset << 4) | tcp->Reserved);
+	Stream_Write_UINT8(s, (UINT8)((tcp->Offset << 4) | (tcp->Reserved & 0xF)));
 	Stream_Write_UINT8(s, tcp->TcpFlags);
 	Stream_Write_UINT16_BE(s, tcp->Window);
 	Stream_Write_UINT16_BE(s, tcp->Checksum);
@@ -380,7 +262,6 @@ BOOL WLog_PacketMessage_Write(wPcap* pcap, void* data, size_t length, DWORD flag
 {
 	wTcpHeader tcp;
 	wIPv4Header ipv4;
-	struct timeval tp;
 	wPcapRecord record;
 	wEthernetHeader ethernet;
 	ethernet.Type = 0x0800;
@@ -474,14 +355,16 @@ BOOL WLog_PacketMessage_Write(wPcap* pcap, void* data, size_t length, DWORD flag
 	record.header.incl_len = (UINT32)record.length + offset;
 	record.header.orig_len = (UINT32)record.length + offset;
 	record.next = NULL;
-	gettimeofday(&tp, 0);
-	record.header.ts_sec = tp.tv_sec;
-	record.header.ts_usec = tp.tv_usec;
+
+	UINT64 ns = winpr_GetUnixTimeNS();
+	record.header.ts_sec = (UINT32)WINPR_TIME_NS_TO_S(ns);
+	record.header.ts_usec = WINPR_TIME_NS_REM_US(ns);
+
 	if (!Pcap_Write_RecordHeader(pcap, &record.header) ||
 	    !WLog_PacketMessage_Write_EthernetHeader(pcap, &ethernet) ||
 	    !WLog_PacketMessage_Write_IPv4Header(pcap, &ipv4) ||
 	    !WLog_PacketMessage_Write_TcpHeader(pcap, &tcp) || !Pcap_Write_RecordContent(pcap, &record))
 		return FALSE;
-	fflush(pcap->fp);
+	(void)fflush(pcap->fp);
 	return TRUE;
 }

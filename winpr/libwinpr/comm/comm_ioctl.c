@@ -22,8 +22,6 @@
 
 #include <winpr/config.h>
 
-#if defined __linux__ && !defined ANDROID
-
 #include <winpr/assert.h>
 #include <errno.h>
 
@@ -34,6 +32,8 @@
 #include "comm_serial_sys.h"
 #include "comm_sercx_sys.h"
 #include "comm_sercx2_sys.h"
+
+static const char* comm_ioctl_modem_status_string(ULONG status, char* buffer, size_t size);
 
 /* NB: MS-RDPESP's recommendation:
  *
@@ -50,28 +50,13 @@
  * found in [MSFT-W2KDDK] Volume 2, Part 2—Serial and Parallel
  * Drivers, and in [MSDN-PORTS].
  */
-
-const char* _comm_serial_ioctl_name(ULONG number)
-{
-	int i;
-
-	for (i = 0; _SERIAL_IOCTL_NAMES[i].number != 0; i++)
-	{
-		if (_SERIAL_IOCTL_NAMES[i].number == number)
-		{
-			return _SERIAL_IOCTL_NAMES[i].name;
-		}
-	}
-
-	return "(unknown ioctl name)";
-}
-
 static BOOL s_CommDeviceIoControl(HANDLE hDevice, DWORD dwIoControlCode, LPVOID lpInBuffer,
                                   DWORD nInBufferSize, LPVOID lpOutBuffer, DWORD nOutBufferSize,
                                   LPDWORD lpBytesReturned, LPOVERLAPPED lpOverlapped)
 {
+	char buffer[128] = { 0 };
 	WINPR_COMM* pComm = (WINPR_COMM*)hDevice;
-	SERIAL_DRIVER* pServerSerialDriver = NULL;
+	const SERIAL_DRIVER* pServerSerialDriver = NULL;
 
 	if (!CommIsHandleValid(hDevice))
 		return FALSE;
@@ -84,16 +69,17 @@ static BOOL s_CommDeviceIoControl(HANDLE hDevice, DWORD dwIoControlCode, LPVOID 
 
 	if (lpBytesReturned == NULL)
 	{
-		SetLastError(ERROR_INVALID_PARAMETER); /* since we doesn't suppport lpOverlapped != NULL */
+		SetLastError(ERROR_INVALID_PARAMETER); /* since we doesn't support lpOverlapped != NULL */
 		return FALSE;
 	}
 
 	/* clear any previous last error */
 	SetLastError(ERROR_SUCCESS);
 
-	*lpBytesReturned = 0; /* will be ajusted if required ... */
+	*lpBytesReturned = 0; /* will be adjusted if required ... */
 
-	CommLog_Print(WLOG_DEBUG, "CommDeviceIoControl: IoControlCode: 0x%0.8x", dwIoControlCode);
+	CommLog_Print(WLOG_DEBUG, "CommDeviceIoControl: IoControlCode: %s [0x%08" PRIx32 "]",
+	              _comm_serial_ioctl_name(dwIoControlCode), dwIoControlCode);
 
 	/* remoteSerialDriver to be use ...
 	 *
@@ -392,6 +378,8 @@ static BOOL s_CommDeviceIoControl(HANDLE hDevice, DWORD dwIoControlCode, LPVOID 
 				if (!pServerSerialDriver->get_modemstatus(pComm, pRegister))
 					return FALSE;
 
+				CommLog_Print(WLOG_DEBUG, "modem status %s" PRIx32,
+				              comm_ioctl_modem_status_string(*pRegister, buffer, sizeof(buffer)));
 				*lpBytesReturned = sizeof(ULONG);
 				return TRUE;
 			}
@@ -410,7 +398,10 @@ static BOOL s_CommDeviceIoControl(HANDLE hDevice, DWORD dwIoControlCode, LPVOID 
 					return FALSE;
 				}
 
-				return pServerSerialDriver->set_wait_mask(pComm, pWaitMask);
+				const BOOL rc = pServerSerialDriver->set_wait_mask(pComm, pWaitMask);
+				CommLog_Print(WLOG_DEBUG, "set_wait_mask %s -> %d",
+				              CommSerialEvString(*pWaitMask, buffer, sizeof(buffer)), rc);
+				return rc;
 			}
 			break;
 		}
@@ -430,6 +421,8 @@ static BOOL s_CommDeviceIoControl(HANDLE hDevice, DWORD dwIoControlCode, LPVOID 
 				if (!pServerSerialDriver->get_wait_mask(pComm, pWaitMask))
 					return FALSE;
 
+				CommLog_Print(WLOG_DEBUG, "get_wait_mask %s",
+				              CommSerialEvString(*pWaitMask, buffer, sizeof(buffer)));
 				*lpBytesReturned = sizeof(ULONG);
 				return TRUE;
 			}
@@ -448,14 +441,12 @@ static BOOL s_CommDeviceIoControl(HANDLE hDevice, DWORD dwIoControlCode, LPVOID 
 					return FALSE;
 				}
 
-				if (!pServerSerialDriver->wait_on_mask(pComm, pOutputMask))
-				{
-					*lpBytesReturned = sizeof(ULONG);
-					return FALSE;
-				}
+				const BOOL rc = pServerSerialDriver->wait_on_mask(pComm, pOutputMask);
 
 				*lpBytesReturned = sizeof(ULONG);
-				return TRUE;
+				CommLog_Print(WLOG_DEBUG, "wait_on_mask %s -> %d",
+				              CommSerialEvString(*pOutputMask, buffer, sizeof(buffer)), rc);
+				return rc;
 			}
 			break;
 		}
@@ -613,6 +604,8 @@ static BOOL s_CommDeviceIoControl(HANDLE hDevice, DWORD dwIoControlCode, LPVOID 
 			}
 			break;
 		}
+		default:
+			break;
 	}
 
 	CommLog_Print(
@@ -639,7 +632,7 @@ BOOL CommDeviceIoControl(HANDLE hDevice, DWORD dwIoControlCode, LPVOID lpInBuffe
                          LPDWORD lpBytesReturned, LPOVERLAPPED lpOverlapped)
 {
 	WINPR_COMM* pComm = (WINPR_COMM*)hDevice;
-	BOOL result;
+	BOOL result = 0;
 
 	if (hDevice == INVALID_HANDLE_VALUE)
 	{
@@ -663,19 +656,19 @@ BOOL CommDeviceIoControl(HANDLE hDevice, DWORD dwIoControlCode, LPVOID lpInBuffe
 	{
 		/* This might be a hint for a bug, especially when result==TRUE */
 		CommLog_Print(WLOG_WARN,
-		              "lpBytesReturned=%" PRIu32 " and nOutBufferSize=%" PRIu32 " are different!",
-		              *lpBytesReturned, nOutBufferSize);
+		              "IoControlCode=[0x%08" PRIX32 "] %s: lpBytesReturned=%" PRIu32
+		              " and nOutBufferSize=%" PRIu32 " are different!",
+		              dwIoControlCode, _comm_serial_ioctl_name(dwIoControlCode), *lpBytesReturned,
+		              nOutBufferSize);
 	}
 
 	if (pComm->permissive)
 	{
 		if (!result)
 		{
-			CommLog_Print(
-			    WLOG_WARN,
-			    "[permissive]: whereas it failed, made to succeed IoControlCode=[0x%08" PRIX32
-			    "] %s, last-error: 0x%08" PRIX32 "",
-			    dwIoControlCode, _comm_serial_ioctl_name(dwIoControlCode), GetLastError());
+			CommLog_Print(WLOG_WARN,
+			              "[permissive]: IoControlCode=[0x%08" PRIX32 "] %s failed, ignoring",
+			              dwIoControlCode, _comm_serial_ioctl_name(dwIoControlCode));
 		}
 
 		return TRUE; /* always! */
@@ -684,50 +677,82 @@ BOOL CommDeviceIoControl(HANDLE hDevice, DWORD dwIoControlCode, LPVOID lpInBuffe
 	return result;
 }
 
-int _comm_ioctl_tcsetattr(int fd, int optional_actions, const struct termios* termios_p)
+int comm_ioctl_tcsetattr(int fd, int optional_actions, const struct termios* termios_p)
 {
-	int result;
 	struct termios currentState = { 0 };
-
-	if ((result = tcsetattr(fd, optional_actions, termios_p)) < 0)
+	size_t count = 0;
+	do
 	{
-		CommLog_Print(WLOG_WARN, "tcsetattr failure, errno: %d", errno);
-		return result;
-	}
-
-	/* NB: tcsetattr() can succeed even if not all changes have been applied. */
-	if ((result = tcgetattr(fd, &currentState)) < 0)
-	{
-		CommLog_Print(WLOG_WARN, "tcgetattr failure, errno: %d", errno);
-		return result;
-	}
-
-	if (memcmp(&currentState, termios_p, sizeof(struct termios)) != 0)
-	{
-		CommLog_Print(WLOG_DEBUG,
-		              "all termios parameters are not set yet, doing a second attempt...");
-		if ((result = tcsetattr(fd, optional_actions, termios_p)) < 0)
+		const int src = tcsetattr(fd, optional_actions, termios_p);
+		if (src < 0)
 		{
-			CommLog_Print(WLOG_WARN, "2nd tcsetattr failure, errno: %d", errno);
-			return result;
+			char buffer[64] = { 0 };
+			CommLog_Print(WLOG_WARN, "[%" PRIuz "] tcsetattr failure, errno: %s [%d]", count,
+			              winpr_strerror(errno, buffer, sizeof(buffer)), errno);
+			return src;
 		}
 
-		ZeroMemory(&currentState, sizeof(struct termios));
-		if ((result = tcgetattr(fd, &currentState)) < 0)
+		/* NB: tcsetattr() can succeed even if not all changes have been applied. */
+		const int rrc = tcgetattr(fd, &currentState);
+		if (rrc < 0)
 		{
-			CommLog_Print(WLOG_WARN, "tcgetattr failure, errno: %d", errno);
-			return result;
+			char buffer[64] = { 0 };
+			CommLog_Print(WLOG_WARN, "[%" PRIuz "] tcgetattr failure, errno: %s [%d]", count,
+			              winpr_strerror(errno, buffer, sizeof(buffer)), errno);
+			return rrc;
 		}
-
-		if (memcmp(&currentState, termios_p, sizeof(struct termios)) != 0)
-		{
-			CommLog_Print(WLOG_WARN,
-			              "Failure: all termios parameters are still not set on a second attempt");
-			return -1;
-		}
-	}
+		// NOLINTNEXTLINE(bugprone-suspicious-memory-comparison,cert-exp42-c,cert-flp37-c)
+	} while ((memcmp(&currentState, termios_p, sizeof(struct termios)) != 0) && (count++ < 2));
 
 	return 0;
 }
 
-#endif /* __linux__ */
+static const char* comm_ioctl_modem_flag_str(ULONG flag)
+{
+	switch (flag)
+	{
+		case SERIAL_MSR_DCTS:
+			return "SERIAL_MSR_DCTS";
+		case SERIAL_MSR_DDSR:
+			return "SERIAL_MSR_DDSR";
+		case SERIAL_MSR_TERI:
+			return "SERIAL_MSR_TERI";
+		case SERIAL_MSR_DDCD:
+			return "SERIAL_MSR_DDCD";
+		case SERIAL_MSR_CTS:
+			return "SERIAL_MSR_CTS";
+		case SERIAL_MSR_DSR:
+			return "SERIAL_MSR_DSR";
+		case SERIAL_MSR_RI:
+			return "SERIAL_MSR_RI";
+		case SERIAL_MSR_DCD:
+			return "SERIAL_MSR_DCD";
+		default:
+			return "SERIAL_MSR_UNKNOWN";
+	}
+}
+
+const char* comm_ioctl_modem_status_string(ULONG status, char* buffer, size_t size)
+{
+	const ULONG flags[] = { SERIAL_MSR_DCTS, SERIAL_MSR_DDSR, SERIAL_MSR_TERI, SERIAL_MSR_DDCD,
+		                    SERIAL_MSR_CTS,  SERIAL_MSR_DSR,  SERIAL_MSR_RI,   SERIAL_MSR_DCD
+
+	};
+	winpr_str_append("{", buffer, size, "");
+
+	const char* sep = "";
+	for (size_t x = 0; x < ARRAYSIZE(flags); x++)
+	{
+		const ULONG flag = flags[x];
+		if (status & flag)
+		{
+			winpr_str_append(comm_ioctl_modem_flag_str(flag), buffer, size, sep);
+			sep = "|";
+		}
+	}
+
+	char number[32] = { 0 };
+	(void)_snprintf(number, sizeof(number), "}[0x%08" PRIx32 "]", status);
+	winpr_str_append(number, buffer, size, "");
+	return buffer;
+}
