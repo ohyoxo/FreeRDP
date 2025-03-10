@@ -25,6 +25,7 @@
 
 #include <winpr/string.h>
 #include <winpr/file.h>
+#include <winpr/cast.h>
 
 #include <freerdp/client.h>
 #include <freerdp/client/file.h>
@@ -45,7 +46,6 @@
  */
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include <winpr/wtypes.h>
@@ -58,13 +58,13 @@
 
 static const BYTE BOM_UTF16_LE[2] = { 0xFF, 0xFE };
 
-#define INVALID_INTEGER_VALUE 0xFFFFFFFF
+// #define INVALID_INTEGER_VALUE 0xFFFFFFFF
 
 #define RDP_FILE_LINE_FLAG_FORMATTED 0x00000001
-#define RDP_FILE_LINE_FLAG_STANDARD 0x00000002
+// #define RDP_FILE_LINE_FLAG_STANDARD 0x00000002
 #define RDP_FILE_LINE_FLAG_TYPE_STRING 0x00000010
 #define RDP_FILE_LINE_FLAG_TYPE_INTEGER 0x00000020
-#define RDP_FILE_LINE_FLAG_TYPE_BINARY 0x00000040
+// #define RDP_FILE_LINE_FLAG_TYPE_BINARY 0x00000040
 
 struct rdp_file_line
 {
@@ -336,6 +336,15 @@ static const char key_int_singlemoninwindowedmode[] = "singlemoninwindowedmode";
 static const char key_int_maximizetocurrentdisplays[] = "maximizetocurrentdisplays";
 static const char key_int_use_multimon[] = "use multimon";
 static const char key_int_redirectwebauthn[] = "redirectwebauthn";
+
+static BOOL utils_str_is_empty(const char* str)
+{
+	if (!str)
+		return TRUE;
+	if (strlen(str) == 0)
+		return TRUE;
+	return FALSE;
+}
 
 static SSIZE_T freerdp_client_rdp_file_add_line(rdpFile* file);
 static rdpFileLine* freerdp_client_rdp_file_find_line_by_name(const rdpFile* file,
@@ -655,8 +664,8 @@ static BOOL freerdp_client_rdp_file_set_integer(rdpFile* file, const char* name,
 static BOOL freerdp_client_parse_rdp_file_integer(rdpFile* file, const char* name,
                                                   const char* value)
 {
-	char* endptr;
-	long ivalue;
+	char* endptr = NULL;
+	long ivalue = 0;
 	errno = 0;
 	ivalue = strtol(value, &endptr, 0);
 
@@ -748,10 +757,8 @@ static SSIZE_T freerdp_client_rdp_file_add_line(rdpFile* file)
 
 	while ((file->lineCount + 1) > file->lineSize)
 	{
-		size_t new_size;
-		rdpFileLine* new_line;
-		new_size = file->lineSize * 2;
-		new_line = (rdpFileLine*)realloc(file->lines, new_size * sizeof(rdpFileLine));
+		size_t new_size = file->lineCount + 2048;
+		rdpFileLine* new_line = (rdpFileLine*)realloc(file->lines, new_size * sizeof(rdpFileLine));
 
 		if (!new_line)
 			return -1;
@@ -783,9 +790,9 @@ BOOL freerdp_client_parse_rdp_file_buffer(rdpFile* file, const BYTE* buffer, siz
 
 static BOOL trim(char** strptr)
 {
-	char* start;
-	char* str;
-	char* end;
+	char* start = NULL;
+	char* str = NULL;
+	char* end = NULL;
 
 	start = str = *strptr;
 	if (!str)
@@ -880,13 +887,15 @@ BOOL freerdp_client_parse_rdp_file_buffer_ex(rdpFile* file, const BYTE* buffer, 
                                              rdp_file_fkt_parse parse)
 {
 	BOOL rc = FALSE;
-	size_t length;
-	char* line;
-	char* type;
-	char* context;
-	char *d1, *d2;
-	char* beg;
-	char *name, *value;
+	size_t length = 0;
+	char* line = NULL;
+	char* type = NULL;
+	char* context = NULL;
+	char* d1 = NULL;
+	char* d2 = NULL;
+	char* beg = NULL;
+	char* name = NULL;
+	char* value = NULL;
 	char* copy = NULL;
 
 	if (!file)
@@ -991,11 +1000,11 @@ BOOL freerdp_client_parse_rdp_file(rdpFile* file, const char* name)
 
 BOOL freerdp_client_parse_rdp_file_ex(rdpFile* file, const char* name, rdp_file_fkt_parse parse)
 {
-	BOOL status;
-	BYTE* buffer;
+	BOOL status = 0;
+	BYTE* buffer = NULL;
 	FILE* fp = NULL;
-	size_t read_size;
-	INT64 file_size;
+	size_t read_size = 0;
+	INT64 file_size = 0;
 	const char* fname = name;
 
 	if (!file || !name)
@@ -1011,14 +1020,14 @@ BOOL freerdp_client_parse_rdp_file_ex(rdpFile* file, const char* name, rdp_file_
 		return FALSE;
 	}
 
-	_fseeki64(fp, 0, SEEK_END);
+	(void)_fseeki64(fp, 0, SEEK_END);
 	file_size = _ftelli64(fp);
-	_fseeki64(fp, 0, SEEK_SET);
+	(void)_fseeki64(fp, 0, SEEK_SET);
 
 	if (file_size < 1)
 	{
 		WLog_ERR(TAG, "RDP file %s is empty", name);
-		fclose(fp);
+		(void)fclose(fp);
 		return FALSE;
 	}
 
@@ -1026,7 +1035,7 @@ BOOL freerdp_client_parse_rdp_file_ex(rdpFile* file, const char* name, rdp_file_
 
 	if (!buffer)
 	{
-		fclose(fp);
+		(void)fclose(fp);
 		return FALSE;
 	}
 
@@ -1038,7 +1047,7 @@ BOOL freerdp_client_parse_rdp_file_ex(rdpFile* file, const char* name, rdp_file_
 			read_size = (size_t)file_size;
 	}
 
-	fclose(fp);
+	(void)fclose(fp);
 
 	if (read_size < 1)
 	{
@@ -1065,9 +1074,10 @@ static INLINE BOOL FILE_POPULATE_STRING(char** _target, const rdpSettings* _sett
 	*_target = (void*)~((size_t)NULL);
 	if (str)
 	{
-		*_target = _strdup(str);
-		if (!_target)
+		char* copy = _strdup(str);
+		if (!copy)
 			return FALSE;
+		*_target = copy;
 	}
 	return TRUE;
 }
@@ -1103,11 +1113,10 @@ static BOOL rdp_opt_duplicate(const rdpSettings* _settings, FreeRDP_Settings_Key
 
 BOOL freerdp_client_populate_rdp_file_from_settings(rdpFile* file, const rdpSettings* settings)
 {
-	FreeRDP_Settings_Keys_String index;
-	UINT32 LoadBalanceInfoLength;
+	FreeRDP_Settings_Keys_String index = FreeRDP_STRING_UNUSED;
+	UINT32 LoadBalanceInfoLength = 0;
 	const char* GatewayHostname = NULL;
 	char* redirectCameras = NULL;
-	char* redirectUsb = NULL;
 
 	if (!file || !settings)
 		return FALSE;
@@ -1127,18 +1136,23 @@ BOOL freerdp_client_populate_rdp_file_from_settings(rdpFile* file, const rdpSett
 	file->DesktopHeight = freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight);
 	file->SessionBpp = freerdp_settings_get_uint32(settings, FreeRDP_ColorDepth);
 	file->DesktopScaleFactor = freerdp_settings_get_uint32(settings, FreeRDP_DesktopScaleFactor);
-	file->DynamicResolution = freerdp_settings_get_bool(settings, FreeRDP_DynamicResolutionUpdate);
-	file->VideoPlaybackMode = freerdp_settings_get_bool(settings, FreeRDP_SupportVideoOptimized);
+	file->DynamicResolution = WINPR_ASSERTING_INT_CAST(
+	    UINT32, freerdp_settings_get_bool(settings, FreeRDP_SupportDisplayControl));
+	file->VideoPlaybackMode = WINPR_ASSERTING_INT_CAST(
+	    UINT32, freerdp_settings_get_bool(settings, FreeRDP_SupportVideoOptimized));
 
 	// TODO file->MaximizeToCurrentDisplays;
 	// TODO file->SingleMonInWindowedMode;
 	// TODO file->EncodeRedirectedVideoCapture;
 	// TODO file->RedirectedVideoCaptureEncodingQuality;
-	file->ConnectToConsole = freerdp_settings_get_bool(settings, FreeRDP_ConsoleSession);
-	file->NegotiateSecurityLayer =
-	    freerdp_settings_get_bool(settings, FreeRDP_NegotiateSecurityLayer);
-	file->EnableCredSSPSupport = freerdp_settings_get_bool(settings, FreeRDP_NlaSecurity);
-	file->EnableRdsAadAuth = freerdp_settings_get_bool(settings, FreeRDP_AadSecurity);
+	file->ConnectToConsole = WINPR_ASSERTING_INT_CAST(
+	    UINT32, freerdp_settings_get_bool(settings, FreeRDP_ConsoleSession));
+	file->NegotiateSecurityLayer = WINPR_ASSERTING_INT_CAST(
+	    UINT32, freerdp_settings_get_bool(settings, FreeRDP_NegotiateSecurityLayer));
+	file->EnableCredSSPSupport =
+	    WINPR_ASSERTING_INT_CAST(UINT32, freerdp_settings_get_bool(settings, FreeRDP_NlaSecurity));
+	file->EnableRdsAadAuth =
+	    WINPR_ASSERTING_INT_CAST(UINT32, freerdp_settings_get_bool(settings, FreeRDP_AadSecurity));
 
 	if (freerdp_settings_get_bool(settings, FreeRDP_RemoteApplicationMode))
 		index = FreeRDP_RemoteApplicationWorkingDir;
@@ -1215,19 +1229,22 @@ BOOL freerdp_client_populate_rdp_file_from_settings(rdpFile* file, const rdpSett
 	if (!rdp_opt_duplicate(settings, FreeRDP_GatewayAvdActivityhint, &file->activityhint))
 		return FALSE;
 
-	file->AudioCaptureMode = freerdp_settings_get_bool(settings, FreeRDP_AudioCapture);
-	file->BitmapCachePersistEnable =
-	    freerdp_settings_get_bool(settings, FreeRDP_BitmapCachePersistEnabled);
-	file->Compression = freerdp_settings_get_bool(settings, FreeRDP_CompressionEnabled);
+	file->AudioCaptureMode =
+	    WINPR_ASSERTING_INT_CAST(UINT32, freerdp_settings_get_bool(settings, FreeRDP_AudioCapture));
+	file->BitmapCachePersistEnable = WINPR_ASSERTING_INT_CAST(
+	    UINT32, freerdp_settings_get_bool(settings, FreeRDP_BitmapCachePersistEnabled));
+	file->Compression = WINPR_ASSERTING_INT_CAST(
+	    UINT32, freerdp_settings_get_bool(settings, FreeRDP_CompressionEnabled));
 	file->AuthenticationLevel = freerdp_settings_get_uint32(settings, FreeRDP_AuthenticationLevel);
 	file->GatewayUsageMethod = freerdp_settings_get_uint32(settings, FreeRDP_GatewayUsageMethod);
 	file->GatewayCredentialsSource =
 	    freerdp_settings_get_uint32(settings, FreeRDP_GatewayCredentialsSource);
-	file->PromptCredentialOnce =
-	    freerdp_settings_get_bool(settings, FreeRDP_GatewayUseSameCredentials);
-	file->PromptForCredentials = freerdp_settings_get_bool(settings, FreeRDP_PromptForCredentials);
-	file->RemoteApplicationMode =
-	    freerdp_settings_get_bool(settings, FreeRDP_RemoteApplicationMode);
+	file->PromptCredentialOnce = WINPR_ASSERTING_INT_CAST(
+	    UINT32, freerdp_settings_get_bool(settings, FreeRDP_GatewayUseSameCredentials));
+	file->PromptForCredentials = WINPR_ASSERTING_INT_CAST(
+	    UINT32, freerdp_settings_get_bool(settings, FreeRDP_PromptForCredentials));
+	file->RemoteApplicationMode = WINPR_ASSERTING_INT_CAST(
+	    UINT32, freerdp_settings_get_bool(settings, FreeRDP_RemoteApplicationMode));
 	if (!FILE_POPULATE_STRING(&file->GatewayAccessToken, settings, FreeRDP_GatewayAccessToken) ||
 	    !FILE_POPULATE_STRING(&file->RemoteApplicationProgram, settings,
 	                          FreeRDP_RemoteApplicationProgram) ||
@@ -1242,24 +1259,34 @@ BOOL freerdp_client_populate_rdp_file_from_settings(rdpFile* file, const rdpSett
 	    !FILE_POPULATE_STRING(&file->RemoteApplicationCmdLine, settings,
 	                          FreeRDP_RemoteApplicationCmdLine))
 		return FALSE;
-	file->SpanMonitors = freerdp_settings_get_bool(settings, FreeRDP_SpanMonitors);
-	file->UseMultiMon = freerdp_settings_get_bool(settings, FreeRDP_UseMultimon);
-	file->AllowDesktopComposition =
-	    freerdp_settings_get_bool(settings, FreeRDP_AllowDesktopComposition);
-	file->AllowFontSmoothing = freerdp_settings_get_bool(settings, FreeRDP_AllowFontSmoothing);
-	file->DisableWallpaper = freerdp_settings_get_bool(settings, FreeRDP_DisableWallpaper);
-	file->DisableFullWindowDrag =
-	    freerdp_settings_get_bool(settings, FreeRDP_DisableFullWindowDrag);
-	file->DisableMenuAnims = freerdp_settings_get_bool(settings, FreeRDP_DisableMenuAnims);
-	file->DisableThemes = freerdp_settings_get_bool(settings, FreeRDP_DisableThemes);
-	file->BandwidthAutoDetect =
-	    (freerdp_settings_get_uint32(settings, FreeRDP_ConnectionType) >= 7) ? TRUE : FALSE;
+	file->SpanMonitors =
+	    WINPR_ASSERTING_INT_CAST(UINT32, freerdp_settings_get_bool(settings, FreeRDP_SpanMonitors));
+	file->UseMultiMon =
+	    WINPR_ASSERTING_INT_CAST(UINT32, freerdp_settings_get_bool(settings, FreeRDP_UseMultimon));
+	file->AllowDesktopComposition = WINPR_ASSERTING_INT_CAST(
+	    UINT32, freerdp_settings_get_bool(settings, FreeRDP_AllowDesktopComposition));
+	file->AllowFontSmoothing = WINPR_ASSERTING_INT_CAST(
+	    UINT32, freerdp_settings_get_bool(settings, FreeRDP_AllowFontSmoothing));
+	file->DisableWallpaper = WINPR_ASSERTING_INT_CAST(
+	    UINT32, freerdp_settings_get_bool(settings, FreeRDP_DisableWallpaper));
+	file->DisableFullWindowDrag = WINPR_ASSERTING_INT_CAST(
+	    UINT32, freerdp_settings_get_bool(settings, FreeRDP_DisableFullWindowDrag));
+	file->DisableMenuAnims = WINPR_ASSERTING_INT_CAST(
+	    UINT32, freerdp_settings_get_bool(settings, FreeRDP_DisableMenuAnims));
+	file->DisableThemes = WINPR_ASSERTING_INT_CAST(
+	    UINT32, freerdp_settings_get_bool(settings, FreeRDP_DisableThemes));
+	file->BandwidthAutoDetect = (freerdp_settings_get_uint32(settings, FreeRDP_ConnectionType) >=
+	                             CONNECTION_TYPE_AUTODETECT)
+	                                ? TRUE
+	                                : FALSE;
 	file->NetworkAutoDetect =
 	    freerdp_settings_get_bool(settings, FreeRDP_NetworkAutoDetect) ? 1 : 0;
-	file->AutoReconnectionEnabled =
-	    freerdp_settings_get_bool(settings, FreeRDP_AutoReconnectionEnabled);
-	file->RedirectSmartCards = freerdp_settings_get_bool(settings, FreeRDP_RedirectSmartCards);
-	file->RedirectWebauthN = freerdp_settings_get_bool(settings, FreeRDP_RedirectWebAuthN);
+	file->AutoReconnectionEnabled = WINPR_ASSERTING_INT_CAST(
+	    UINT32, freerdp_settings_get_bool(settings, FreeRDP_AutoReconnectionEnabled));
+	file->RedirectSmartCards = WINPR_ASSERTING_INT_CAST(
+	    UINT32, freerdp_settings_get_bool(settings, FreeRDP_RedirectSmartCards));
+	file->RedirectWebauthN = WINPR_ASSERTING_INT_CAST(
+	    UINT32, freerdp_settings_get_bool(settings, FreeRDP_RedirectWebAuthN));
 
 	redirectCameras =
 	    freerdp_client_channel_args_to_string(settings, RDPECAM_DVC_CHANNEL_NAME, "device:");
@@ -1270,11 +1297,11 @@ BOOL freerdp_client_populate_rdp_file_from_settings(rdpFile* file, const rdpSett
 		file->EncodeRedirectedVideoCapture = 0;
 		if (str)
 		{
-			unsigned long val;
+			unsigned long val = 0;
 			errno = 0;
 			val = strtoul(str, NULL, 0);
 			if ((val < UINT32_MAX) && (errno == 0))
-				file->EncodeRedirectedVideoCapture = val;
+				file->EncodeRedirectedVideoCapture = (UINT32)val;
 		}
 		free(str);
 
@@ -1282,12 +1309,12 @@ BOOL freerdp_client_populate_rdp_file_from_settings(rdpFile* file, const rdpSett
 		file->RedirectedVideoCaptureEncodingQuality = 0;
 		if (str)
 		{
-			unsigned long val;
+			unsigned long val = 0;
 			errno = 0;
 			val = strtoul(str, NULL, 0);
 			if ((val <= 2) && (errno == 0))
 			{
-				file->RedirectedVideoCaptureEncodingQuality = val;
+				file->RedirectedVideoCaptureEncodingQuality = (UINT32)val;
 			}
 		}
 		free(str);
@@ -1295,7 +1322,8 @@ BOOL freerdp_client_populate_rdp_file_from_settings(rdpFile* file, const rdpSett
 		file->RedirectCameras = redirectCameras;
 	}
 #ifdef CHANNEL_URBDRC_CLIENT
-	redirectUsb = freerdp_client_channel_args_to_string(settings, URBDRC_CHANNEL_NAME, "device:");
+	char* redirectUsb =
+	    freerdp_client_channel_args_to_string(settings, URBDRC_CHANNEL_NAME, "device:");
 	if (redirectUsb)
 		file->UsbDevicesToRedirect = redirectUsb;
 
@@ -1308,7 +1336,7 @@ BOOL freerdp_client_populate_rdp_file_from_settings(rdpFile* file, const rdpSett
 	file->RedirectComPorts = (freerdp_settings_get_bool(settings, FreeRDP_RedirectSerialPorts) ||
 	                          freerdp_settings_get_bool(settings, FreeRDP_RedirectParallelPorts));
 	file->RedirectLocation =
-	    freerdp_dynamic_channel_collection_find(settings, LOCATION_DVC_CHANNEL_NAME) ? TRUE : FALSE;
+	    freerdp_dynamic_channel_collection_find(settings, LOCATION_CHANNEL_NAME) ? TRUE : FALSE;
 	if (!FILE_POPULATE_STRING(&file->DrivesToRedirect, settings, FreeRDP_DrivesToRedirect) ||
 	    !FILE_POPULATE_STRING(&file->PreconnectionBlob, settings, FreeRDP_PreconnectionBlob) ||
 	    !FILE_POPULATE_STRING(&file->KdcProxyName, settings, FreeRDP_KerberosKdcUrl))
@@ -1316,13 +1344,13 @@ BOOL freerdp_client_populate_rdp_file_from_settings(rdpFile* file, const rdpSett
 
 	{
 		size_t offset = 0;
-		UINT32 x, count = freerdp_settings_get_uint32(settings, FreeRDP_NumMonitorIds);
+		UINT32 count = freerdp_settings_get_uint32(settings, FreeRDP_NumMonitorIds);
 		const UINT32* MonitorIds = freerdp_settings_get_pointer(settings, FreeRDP_MonitorIds);
 		/* String size: 10 char UINT32 max string length, 1 char separator, one element NULL */
 		size_t size = count * (10 + 1) + 1;
 
 		char* str = calloc(size, sizeof(char));
-		for (x = 0; x < count; x++)
+		for (UINT32 x = 0; x < count; x++)
 		{
 			int rc = _snprintf(&str[offset], size - offset, "%" PRIu32 ",", MonitorIds[x]);
 			if (rc <= 0)
@@ -1345,28 +1373,25 @@ BOOL freerdp_client_populate_rdp_file_from_settings(rdpFile* file, const rdpSett
 
 BOOL freerdp_client_write_rdp_file(const rdpFile* file, const char* name, BOOL unicode)
 {
-	FILE* fp;
-	size_t size;
-	char* buffer;
 	int status = 0;
 	WCHAR* unicodestr = NULL;
 
 	if (!file || !name)
 		return FALSE;
 
-	size = freerdp_client_write_rdp_file_buffer(file, NULL, 0);
+	const size_t size = freerdp_client_write_rdp_file_buffer(file, NULL, 0);
 	if (size == 0)
 		return FALSE;
-	buffer = (char*)calloc((size_t)(size + 1), sizeof(char));
+	char* buffer = calloc(size + 1ULL, sizeof(char));
 
-	if (freerdp_client_write_rdp_file_buffer(file, buffer, (size_t)size + 1) != size)
+	if (freerdp_client_write_rdp_file_buffer(file, buffer, size + 1) != size)
 	{
 		WLog_ERR(TAG, "freerdp_client_write_rdp_file: error writing to output buffer");
 		free(buffer);
 		return FALSE;
 	}
 
-	fp = winpr_fopen(name, "w+b");
+	FILE* fp = winpr_fopen(name, "w+b");
 
 	if (fp)
 	{
@@ -1378,7 +1403,7 @@ BOOL freerdp_client_write_rdp_file(const rdpFile* file, const char* name, BOOL u
 			if (!unicodestr)
 			{
 				free(buffer);
-				fclose(fp);
+				(void)fclose(fp);
 				return FALSE;
 			}
 
@@ -1388,7 +1413,7 @@ BOOL freerdp_client_write_rdp_file(const rdpFile* file, const char* name, BOOL u
 			{
 				free(buffer);
 				free(unicodestr);
-				fclose(fp);
+				(void)fclose(fp);
 				return FALSE;
 			}
 
@@ -1396,15 +1421,15 @@ BOOL freerdp_client_write_rdp_file(const rdpFile* file, const char* name, BOOL u
 		}
 		else
 		{
-			if (fwrite(buffer, 1, (size_t)size, fp) != (size_t)size)
+			if (fwrite(buffer, 1, size, fp) != size)
 			{
 				free(buffer);
-				fclose(fp);
+				(void)fclose(fp);
 				return FALSE;
 			}
 		}
 
-		fflush(fp);
+		(void)fflush(fp);
 		status = fclose(fp);
 	}
 
@@ -1416,10 +1441,10 @@ WINPR_ATTR_FORMAT_ARG(3, 4)
 static SSIZE_T freerdp_client_write_setting_to_buffer(char** buffer, size_t* bufferSize,
                                                       WINPR_FORMAT_ARG const char* fmt, ...)
 {
-	va_list ap;
-	SSIZE_T len;
-	char* buf;
-	size_t bufSize;
+	va_list ap = { 0 };
+	SSIZE_T len = 0;
+	char* buf = NULL;
+	size_t bufSize = 0;
 
 	if (!buffer || !bufferSize || !fmt)
 		return -1;
@@ -1456,149 +1481,174 @@ static SSIZE_T freerdp_client_write_setting_to_buffer(char** buffer, size_t* buf
 	return len;
 }
 
-size_t freerdp_client_write_rdp_file_buffer(const rdpFile* file, char* buffer, size_t size)
+static SSIZE_T write_int_parameters(const rdpFile* file, char* buffer, size_t size)
 {
-	size_t totalSize = 0;
+	WINPR_ASSERT(file);
 
-	if (!file)
-		return 0;
+	struct intentry_t
+	{
+		const char* key;
+		DWORD val;
+	};
+	const struct intentry_t settings[] = {
+		{ key_int_use_multimon, file->UseMultiMon },
+		{ key_int_maximizetocurrentdisplays, file->MaximizeToCurrentDisplays },
+		{ key_int_singlemoninwindowedmode, file->SingleMonInWindowedMode },
+		{ key_int_screen_mode_id, file->ScreenModeId },
+		{ key_int_span_monitors, file->SpanMonitors },
+		{ key_int_smart_sizing, file->SmartSizing },
+		{ key_int_dynamic_resolution, file->DynamicResolution },
+		{ key_int_enablesuperpan, file->EnableSuperSpan },
+		{ key_int_superpanaccelerationfactor, file->SuperSpanAccelerationFactor },
+		{ key_int_desktopwidth, file->DesktopWidth },
+		{ key_int_desktopheight, file->DesktopHeight },
+		{ key_int_desktop_size_id, file->DesktopSizeId },
+		{ key_int_session_bpp, file->SessionBpp },
+		{ key_int_desktopscalefactor, file->DesktopScaleFactor },
+		{ key_int_compression, file->Compression },
+		{ key_int_keyboardhook, file->KeyboardHook },
+		{ key_int_disable_ctrl_alt_del, file->DisableCtrlAltDel },
+		{ key_int_audiomode, file->AudioMode },
+		{ key_int_audioqualitymode, file->AudioQualityMode },
+		{ key_int_audiocapturemode, file->AudioCaptureMode },
+		{ key_int_encode_redirected_video_capture, file->EncodeRedirectedVideoCapture },
+		{ key_int_redirected_video_capture_encoding_quality,
+		  file->RedirectedVideoCaptureEncodingQuality },
+		{ key_int_videoplaybackmode, file->VideoPlaybackMode },
+		{ key_int_connection_type, file->ConnectionType },
+		{ key_int_networkautodetect, file->NetworkAutoDetect },
+		{ key_int_bandwidthautodetect, file->BandwidthAutoDetect },
+		{ key_int_pinconnectionbar, file->PinConnectionBar },
+		{ key_int_displayconnectionbar, file->DisplayConnectionBar },
+		{ key_int_workspaceid, file->WorkspaceId },
+		{ key_int_enableworkspacereconnect, file->EnableWorkspaceReconnect },
+		{ key_int_disable_wallpaper, file->DisableWallpaper },
+		{ key_int_allow_font_smoothing, file->AllowFontSmoothing },
+		{ key_int_allow_desktop_composition, file->AllowDesktopComposition },
+		{ key_int_disable_full_window_drag, file->DisableFullWindowDrag },
+		{ key_int_disable_menu_anims, file->DisableMenuAnims },
+		{ key_int_disable_themes, file->DisableThemes },
+		{ key_int_disable_cursor_setting, file->DisableCursorSetting },
+		{ key_int_bitmapcachesize, file->BitmapCacheSize },
+		{ key_int_bitmapcachepersistenable, file->BitmapCachePersistEnable },
+		{ key_int_server_port, file->ServerPort },
+		{ key_int_redirectdrives, file->RedirectDrives },
+		{ key_int_redirectprinters, file->RedirectPrinters },
+		{ key_int_redirectcomports, file->RedirectComPorts },
+		{ key_int_redirectlocation, file->RedirectLocation },
+		{ key_int_redirectsmartcards, file->RedirectSmartCards },
+		{ key_int_redirectclipboard, file->RedirectClipboard },
+		{ key_int_redirectposdevices, file->RedirectPosDevices },
+		{ key_int_redirectdirectx, file->RedirectDirectX },
+		{ key_int_disableprinterredirection, file->DisablePrinterRedirection },
+		{ key_int_disableclipboardredirection, file->DisableClipboardRedirection },
+		{ key_int_connect_to_console, file->ConnectToConsole },
+		{ key_int_administrative_session, file->AdministrativeSession },
+		{ key_int_autoreconnection_enabled, file->AutoReconnectionEnabled },
+		{ key_int_autoreconnect_max_retries, file->AutoReconnectMaxRetries },
+		{ key_int_public_mode, file->PublicMode },
+		{ key_int_authentication_level, file->AuthenticationLevel },
+		{ key_int_promptcredentialonce, file->PromptCredentialOnce },
+		{ key_int_prompt_for_credentials, file->PromptForCredentials },
+		{ key_int_negotiate_security_layer, file->NegotiateSecurityLayer },
+		{ key_int_enablecredsspsupport, file->EnableCredSSPSupport },
+		{ key_int_enablerdsaadauth, file->EnableRdsAadAuth },
+		{ key_int_remoteapplicationmode, file->RemoteApplicationMode },
+		{ key_int_remoteapplicationexpandcmdline, file->RemoteApplicationExpandCmdLine },
+		{ key_int_remoteapplicationexpandworkingdir, file->RemoteApplicationExpandWorkingDir },
+		{ key_int_disableconnectionsharing, file->DisableConnectionSharing },
+		{ key_int_disableremoteappcapscheck, file->DisableRemoteAppCapsCheck },
+		{ key_int_gatewayusagemethod, file->GatewayUsageMethod },
+		{ key_int_gatewayprofileusagemethod, file->GatewayProfileUsageMethod },
+		{ key_int_gatewaycredentialssource, file->GatewayCredentialsSource },
+		{ key_int_use_redirection_server_name, file->UseRedirectionServerName },
+		{ key_int_rdgiskdcproxy, file->RdgIsKdcProxy },
+		{ key_int_redirectwebauthn, file->RedirectWebauthN }
+	};
 
-	/* either buffer and size are null or non-null */
-	if ((!buffer || !size) && (buffer || size))
-		return 0;
-
-#define WRITE_SETTING_(fmt_, ...)                                                                \
-	{                                                                                            \
-		SSIZE_T res = freerdp_client_write_setting_to_buffer(&buffer, &size, fmt_, __VA_ARGS__); \
-		if (res < 0)                                                                             \
-			return 0;                                                                            \
-		totalSize += (size_t)res;                                                                \
+	SSIZE_T totalSize = 0;
+	for (size_t x = 0; x < ARRAYSIZE(settings); x++)
+	{
+		const struct intentry_t* cur = &settings[x];
+		if (~cur->val)
+		{
+			const SSIZE_T res = freerdp_client_write_setting_to_buffer(
+			    &buffer, &size, "%s:i:%" PRIu32, cur->key, cur->val);
+			if (res < 0)
+				return res;
+			totalSize += res;
+		}
 	}
 
-#define WRITE_SETTING_INT(key_, param_)                   \
-	do                                                    \
-	{                                                     \
-		if (~(param_))                                    \
-			WRITE_SETTING_("%s:i:%" PRIu32, key_, param_) \
-	} while (0)
+	return totalSize;
+}
 
-#define WRITE_SETTING_STR(key_, param_)             \
-	do                                              \
-	{                                               \
-		if (~(size_t)(param_))                      \
-			WRITE_SETTING_("%s:s:%s", key_, param_) \
-	} while (0)
+static SSIZE_T write_string_parameters(const rdpFile* file, char* buffer, size_t size)
+{
+	WINPR_ASSERT(file);
 
-	/* integer parameters */
-	WRITE_SETTING_INT(key_int_use_multimon, file->UseMultiMon);
-	WRITE_SETTING_INT(key_int_maximizetocurrentdisplays, file->MaximizeToCurrentDisplays);
-	WRITE_SETTING_INT(key_int_singlemoninwindowedmode, file->SingleMonInWindowedMode);
-	WRITE_SETTING_INT(key_int_screen_mode_id, file->ScreenModeId);
-	WRITE_SETTING_INT(key_int_span_monitors, file->SpanMonitors);
-	WRITE_SETTING_INT(key_int_smart_sizing, file->SmartSizing);
-	WRITE_SETTING_INT(key_int_dynamic_resolution, file->DynamicResolution);
-	WRITE_SETTING_INT(key_int_enablesuperpan, file->EnableSuperSpan);
-	WRITE_SETTING_INT(key_int_superpanaccelerationfactor, file->SuperSpanAccelerationFactor);
-	WRITE_SETTING_INT(key_int_desktopwidth, file->DesktopWidth);
-	WRITE_SETTING_INT(key_int_desktopheight, file->DesktopHeight);
-	WRITE_SETTING_INT(key_int_desktop_size_id, file->DesktopSizeId);
-	WRITE_SETTING_INT(key_int_session_bpp, file->SessionBpp);
-	WRITE_SETTING_INT(key_int_desktopscalefactor, file->DesktopScaleFactor);
-	WRITE_SETTING_INT(key_int_compression, file->Compression);
-	WRITE_SETTING_INT(key_int_keyboardhook, file->KeyboardHook);
-	WRITE_SETTING_INT(key_int_disable_ctrl_alt_del, file->DisableCtrlAltDel);
-	WRITE_SETTING_INT(key_int_audiomode, file->AudioMode);
-	WRITE_SETTING_INT(key_int_audioqualitymode, file->AudioQualityMode);
-	WRITE_SETTING_INT(key_int_audiocapturemode, file->AudioCaptureMode);
-	WRITE_SETTING_INT(key_int_encode_redirected_video_capture, file->EncodeRedirectedVideoCapture);
-	WRITE_SETTING_INT(key_int_redirected_video_capture_encoding_quality,
-	                  file->RedirectedVideoCaptureEncodingQuality);
-	WRITE_SETTING_INT(key_int_videoplaybackmode, file->VideoPlaybackMode);
-	WRITE_SETTING_INT(key_int_connection_type, file->ConnectionType);
-	WRITE_SETTING_INT(key_int_networkautodetect, file->NetworkAutoDetect);
-	WRITE_SETTING_INT(key_int_bandwidthautodetect, file->BandwidthAutoDetect);
-	WRITE_SETTING_INT(key_int_pinconnectionbar, file->PinConnectionBar);
-	WRITE_SETTING_INT(key_int_displayconnectionbar, file->DisplayConnectionBar);
-	WRITE_SETTING_INT(key_int_workspaceid, file->WorkspaceId);
-	WRITE_SETTING_INT(key_int_enableworkspacereconnect, file->EnableWorkspaceReconnect);
-	WRITE_SETTING_INT(key_int_disable_wallpaper, file->DisableWallpaper);
-	WRITE_SETTING_INT(key_int_allow_font_smoothing, file->AllowFontSmoothing);
-	WRITE_SETTING_INT(key_int_allow_desktop_composition, file->AllowDesktopComposition);
-	WRITE_SETTING_INT(key_int_disable_full_window_drag, file->DisableFullWindowDrag);
-	WRITE_SETTING_INT(key_int_disable_menu_anims, file->DisableMenuAnims);
-	WRITE_SETTING_INT(key_int_disable_themes, file->DisableThemes);
-	WRITE_SETTING_INT(key_int_disable_cursor_setting, file->DisableCursorSetting);
-	WRITE_SETTING_INT(key_int_bitmapcachesize, file->BitmapCacheSize);
-	WRITE_SETTING_INT(key_int_bitmapcachepersistenable, file->BitmapCachePersistEnable);
-	WRITE_SETTING_INT(key_int_server_port, file->ServerPort);
-	WRITE_SETTING_INT(key_int_redirectdrives, file->RedirectDrives);
-	WRITE_SETTING_INT(key_int_redirectprinters, file->RedirectPrinters);
-	WRITE_SETTING_INT(key_int_redirectcomports, file->RedirectComPorts);
-	WRITE_SETTING_INT(key_int_redirectlocation, file->RedirectLocation);
-	WRITE_SETTING_INT(key_int_redirectsmartcards, file->RedirectSmartCards);
-	WRITE_SETTING_INT(key_int_redirectclipboard, file->RedirectClipboard);
-	WRITE_SETTING_INT(key_int_redirectposdevices, file->RedirectPosDevices);
-	WRITE_SETTING_INT(key_int_redirectdirectx, file->RedirectDirectX);
-	WRITE_SETTING_INT(key_int_disableprinterredirection, file->DisablePrinterRedirection);
-	WRITE_SETTING_INT(key_int_disableclipboardredirection, file->DisableClipboardRedirection);
-	WRITE_SETTING_INT(key_int_connect_to_console, file->ConnectToConsole);
-	WRITE_SETTING_INT(key_int_administrative_session, file->AdministrativeSession);
-	WRITE_SETTING_INT(key_int_autoreconnection_enabled, file->AutoReconnectionEnabled);
-	WRITE_SETTING_INT(key_int_autoreconnect_max_retries, file->AutoReconnectMaxRetries);
-	WRITE_SETTING_INT(key_int_public_mode, file->PublicMode);
-	WRITE_SETTING_INT(key_int_authentication_level, file->AuthenticationLevel);
-	WRITE_SETTING_INT(key_int_promptcredentialonce, file->PromptCredentialOnce);
-	WRITE_SETTING_INT(key_int_prompt_for_credentials, file->PromptForCredentials);
-	WRITE_SETTING_INT(key_int_negotiate_security_layer, file->NegotiateSecurityLayer);
-	WRITE_SETTING_INT(key_int_enablecredsspsupport, file->EnableCredSSPSupport);
-	WRITE_SETTING_INT(key_int_enablerdsaadauth, file->EnableRdsAadAuth);
-	WRITE_SETTING_INT(key_int_remoteapplicationmode, file->RemoteApplicationMode);
-	WRITE_SETTING_INT(key_int_remoteapplicationexpandcmdline, file->RemoteApplicationExpandCmdLine);
-	WRITE_SETTING_INT(key_int_remoteapplicationexpandworkingdir,
-	                  file->RemoteApplicationExpandWorkingDir);
-	WRITE_SETTING_INT(key_int_disableconnectionsharing, file->DisableConnectionSharing);
-	WRITE_SETTING_INT(key_int_disableremoteappcapscheck, file->DisableRemoteAppCapsCheck);
-	WRITE_SETTING_INT(key_int_gatewayusagemethod, file->GatewayUsageMethod);
-	WRITE_SETTING_INT(key_int_gatewayprofileusagemethod, file->GatewayProfileUsageMethod);
-	WRITE_SETTING_INT(key_int_gatewaycredentialssource, file->GatewayCredentialsSource);
-	WRITE_SETTING_INT(key_int_use_redirection_server_name, file->UseRedirectionServerName);
-	WRITE_SETTING_INT(key_int_rdgiskdcproxy, file->RdgIsKdcProxy);
-	WRITE_SETTING_INT(key_int_redirectwebauthn, file->RedirectWebauthN);
+	struct strentry_t
+	{
+		const char* key;
+		const char* val;
+	};
+	const struct strentry_t settings[] = {
+		{ key_str_username, file->Username },
+		{ key_str_domain, file->Domain },
+		{ key_str_password, file->Password },
+		{ key_str_full_address, file->FullAddress },
+		{ key_str_alternate_full_address, file->AlternateFullAddress },
+		{ key_str_usbdevicestoredirect, file->UsbDevicesToRedirect },
+		{ key_str_camerastoredirect, file->RedirectCameras },
+		{ key_str_loadbalanceinfo, file->LoadBalanceInfo },
+		{ key_str_remoteapplicationname, file->RemoteApplicationName },
+		{ key_str_remoteapplicationicon, file->RemoteApplicationIcon },
+		{ key_str_remoteapplicationprogram, file->RemoteApplicationProgram },
+		{ key_str_remoteapplicationfile, file->RemoteApplicationFile },
+		{ key_str_remoteapplicationguid, file->RemoteApplicationGuid },
+		{ key_str_remoteapplicationcmdline, file->RemoteApplicationCmdLine },
+		{ key_str_alternate_shell, file->AlternateShell },
+		{ key_str_shell_working_directory, file->ShellWorkingDirectory },
+		{ key_str_gatewayhostname, file->GatewayHostname },
+		{ key_str_resourceprovider, file->ResourceProvider },
+		{ key_str_wvd, file->WvdEndpointPool },
+		{ key_str_geo, file->geo },
+		{ key_str_armpath, file->armpath },
+		{ key_str_aadtenantid, file->aadtenantid },
+		{ key_str_diagnosticserviceurl, file->diagnosticserviceurl },
+		{ key_str_hubdiscoverygeourl, file->hubdiscoverygeourl },
+		{ key_str_activityhint, file->activityhint },
+		{ key_str_gatewayaccesstoken, file->GatewayAccessToken },
+		{ key_str_kdcproxyname, file->KdcProxyName },
+		{ key_str_drivestoredirect, file->DrivesToRedirect },
+		{ key_str_devicestoredirect, file->DevicesToRedirect },
+		{ key_str_winposstr, file->WinPosStr },
+		{ key_str_pcb, file->PreconnectionBlob },
+		{ key_str_selectedmonitors, file->SelectedMonitors }
+	};
 
-	/* string parameters */
-	WRITE_SETTING_STR(key_str_username, file->Username);
-	WRITE_SETTING_STR(key_str_domain, file->Domain);
-	WRITE_SETTING_STR(key_str_password, file->Password);
-	WRITE_SETTING_STR(key_str_full_address, file->FullAddress);
-	WRITE_SETTING_STR(key_str_alternate_full_address, file->AlternateFullAddress);
-	WRITE_SETTING_STR(key_str_usbdevicestoredirect, file->UsbDevicesToRedirect);
-	WRITE_SETTING_STR(key_str_camerastoredirect, file->RedirectCameras);
-	WRITE_SETTING_STR(key_str_loadbalanceinfo, file->LoadBalanceInfo);
-	WRITE_SETTING_STR(key_str_remoteapplicationname, file->RemoteApplicationName);
-	WRITE_SETTING_STR(key_str_remoteapplicationicon, file->RemoteApplicationIcon);
-	WRITE_SETTING_STR(key_str_remoteapplicationprogram, file->RemoteApplicationProgram);
-	WRITE_SETTING_STR(key_str_remoteapplicationfile, file->RemoteApplicationFile);
-	WRITE_SETTING_STR(key_str_remoteapplicationguid, file->RemoteApplicationGuid);
-	WRITE_SETTING_STR(key_str_remoteapplicationcmdline, file->RemoteApplicationCmdLine);
-	WRITE_SETTING_STR(key_str_alternate_shell, file->AlternateShell);
-	WRITE_SETTING_STR(key_str_shell_working_directory, file->ShellWorkingDirectory);
-	WRITE_SETTING_STR(key_str_gatewayhostname, file->GatewayHostname);
-	WRITE_SETTING_STR(key_str_resourceprovider, file->ResourceProvider);
-	WRITE_SETTING_STR(key_str_wvd, file->WvdEndpointPool);
-	WRITE_SETTING_STR(key_str_geo, file->geo);
-	WRITE_SETTING_STR(key_str_armpath, file->armpath);
-	WRITE_SETTING_STR(key_str_aadtenantid, file->aadtenantid);
-	WRITE_SETTING_STR(key_str_diagnosticserviceurl, file->diagnosticserviceurl);
-	WRITE_SETTING_STR(key_str_hubdiscoverygeourl, file->hubdiscoverygeourl);
-	WRITE_SETTING_STR(key_str_activityhint, file->activityhint);
-	WRITE_SETTING_STR(key_str_gatewayaccesstoken, file->GatewayAccessToken);
-	WRITE_SETTING_STR(key_str_kdcproxyname, file->KdcProxyName);
-	WRITE_SETTING_STR(key_str_drivestoredirect, file->DrivesToRedirect);
-	WRITE_SETTING_STR(key_str_devicestoredirect, file->DevicesToRedirect);
-	WRITE_SETTING_STR(key_str_winposstr, file->WinPosStr);
-	WRITE_SETTING_STR(key_str_pcb, file->PreconnectionBlob);
-	WRITE_SETTING_STR(key_str_selectedmonitors, file->SelectedMonitors);
+	SSIZE_T totalSize = 0;
+	for (size_t x = 0; x < ARRAYSIZE(settings); x++)
+	{
+		const struct strentry_t* cur = &settings[x];
+		if (~(size_t)(cur->val))
+		{
+			const SSIZE_T res = freerdp_client_write_setting_to_buffer(&buffer, &size, "%s:s:%s",
+			                                                           cur->key, cur->val);
+			if (res < 0)
+				return res;
+			totalSize += res;
+		}
+	}
 
+	return totalSize;
+}
+
+static SSIZE_T write_custom_parameters(const rdpFile* file, char* buffer, size_t size)
+{
+	WINPR_ASSERT(file);
+
+	SSIZE_T totalSize = 0;
 	/* custom parameters */
 	for (size_t i = 0; i < file->lineCount; ++i)
 	{
@@ -1612,17 +1662,51 @@ size_t freerdp_client_write_rdp_file_buffer(const rdpFile* file, char* buffer, s
 			res = freerdp_client_write_setting_to_buffer(&buffer, &size, "%s:s:%s", curLine->name,
 			                                             curLine->sValue);
 		if (res < 0)
-			return 0;
+			return res;
 
-		totalSize += (size_t)res;
+		totalSize += res;
 	}
+	return totalSize;
+}
 
+size_t freerdp_client_write_rdp_file_buffer(const rdpFile* file, char* buffer, size_t size)
+{
+	size_t totalSize = 0;
+
+	if (!file)
+		return 0;
+
+	/* either buffer and size are null or non-null */
+	if ((!buffer || !size) && (buffer || size))
+		return 0;
+
+	/* integer parameters */
+	const SSIZE_T intsize = write_int_parameters(file, buffer, size);
+	if (intsize < 0)
+		return 0;
+	totalSize += (size_t)intsize;
+	if (buffer)
+		buffer += intsize;
+
+	/* string parameters */
+	const SSIZE_T stringsize = write_string_parameters(file, buffer, size);
+	if (stringsize < 0)
+		return 0;
+	totalSize += (size_t)stringsize;
+	if (buffer)
+		buffer += stringsize;
+
+	/* custom parameters */
+	const SSIZE_T customsize = write_custom_parameters(file, buffer, size);
+	if (customsize < 0)
+		return 0;
+	totalSize += (size_t)customsize;
 	return totalSize;
 }
 
 static ADDIN_ARGV* rdp_file_to_args(const char* channel, const char* values)
 {
-	size_t count, x;
+	size_t count = 0;
 	char** p = NULL;
 	ADDIN_ARGV* args = freerdp_addin_argv_new(0, NULL);
 	if (!args)
@@ -1631,26 +1715,26 @@ static ADDIN_ARGV* rdp_file_to_args(const char* channel, const char* values)
 		goto fail;
 
 	p = CommandLineParseCommaSeparatedValues(values, &count);
-	for (x = 0; x < count; x++)
+	for (size_t x = 0; x < count; x++)
 	{
-		BOOL rc;
+		BOOL rc = 0;
 		const char* val = p[x];
 		const size_t len = strlen(val) + 8;
 		char* str = calloc(len, sizeof(char));
 		if (!str)
 			goto fail;
 
-		_snprintf(str, len, "device:%s", val);
+		(void)_snprintf(str, len, "device:%s", val);
 		rc = freerdp_addin_argv_add_argument(args, str);
 		free(str);
 		if (!rc)
 			goto fail;
 	}
-	free(p);
+	CommandLineParserFree(p);
 	return args;
 
 fail:
-	free(p);
+	CommandLineParserFree(p);
 	freerdp_addin_argv_free(args);
 	return NULL;
 }
@@ -1771,6 +1855,7 @@ BOOL freerdp_client_populate_settings_from_rdp_file(const rdpFile* file, rdpSett
 				break;
 		}
 	}
+
 	if (~file->DesktopWidth)
 	{
 		if (!freerdp_settings_set_uint32(settings, FreeRDP_DesktopWidth, file->DesktopWidth))
@@ -2295,13 +2380,14 @@ BOOL freerdp_client_populate_settings_from_rdp_file(const rdpFile* file, rdpSett
 			return FALSE;
 	}
 
-	if (~file->RedirectLocation)
+	if (~file->RedirectLocation && (file->RedirectLocation != 0))
 	{
 		size_t count = 0;
-		char** str =
-		    CommandLineParseCommaSeparatedValuesEx(LOCATION_DVC_CHANNEL_NAME, NULL, &count);
-		const BOOL rc = freerdp_client_add_dynamic_channel(settings, count, str);
-		free(str);
+
+		char** ptr = CommandLineParseCommaSeparatedValuesEx(LOCATION_CHANNEL_NAME, NULL, &count);
+		const BOOL rc =
+		    freerdp_client_add_dynamic_channel(settings, count, (const char* const*)ptr);
+		CommandLineParserFree(ptr);
 		if (!rc)
 			return FALSE;
 	}
@@ -2311,7 +2397,7 @@ BOOL freerdp_client_populate_settings_from_rdp_file(const rdpFile* file, rdpSett
 		/* What is this?! */
 	}
 
-	if (~((size_t)file->DevicesToRedirect))
+	if ((~((size_t)file->DevicesToRedirect)) && !utils_str_is_empty(file->DevicesToRedirect))
 	{
 		/**
 		 * Devices to redirect:
@@ -2341,42 +2427,47 @@ BOOL freerdp_client_populate_settings_from_rdp_file(const rdpFile* file, rdpSett
 			return FALSE;
 	}
 
-	if (~((size_t)file->DrivesToRedirect))
+	if ((~((size_t)file->DrivesToRedirect)) && !utils_str_is_empty(file->DrivesToRedirect))
 	{
 		if (!freerdp_settings_set_string(settings, FreeRDP_DrivesToRedirect,
 		                                 file->DrivesToRedirect))
 			return FALSE;
 	}
 
-	if (~((size_t)file->RedirectCameras))
+	if ((~((size_t)file->RedirectCameras)) && !utils_str_is_empty(file->RedirectCameras))
 	{
 #if defined(CHANNEL_RDPECAM_CLIENT)
 		union
 		{
 			char** c;
-			const char** cc;
+			const char* const* cc;
 		} cnv;
 		ADDIN_ARGV* args = rdp_file_to_args(RDPECAM_DVC_CHANNEL_NAME, file->RedirectCameras);
 		if (!args)
 			return FALSE;
 
+		BOOL status = TRUE;
 		if (~file->EncodeRedirectedVideoCapture)
 		{
-			char encode[64];
-			_snprintf(encode, sizeof(encode), "encode:%" PRIu32,
-			          file->EncodeRedirectedVideoCapture);
-			freerdp_addin_argv_add_argument(args, encode);
+			char encode[64] = { 0 };
+			(void)_snprintf(encode, sizeof(encode), "encode:%" PRIu32,
+			                file->EncodeRedirectedVideoCapture);
+			if (!freerdp_addin_argv_add_argument(args, encode))
+				status = FALSE;
 		}
 		if (~file->RedirectedVideoCaptureEncodingQuality)
 		{
-			char quality[64];
-			_snprintf(quality, sizeof(quality), "quality:%" PRIu32,
-			          file->RedirectedVideoCaptureEncodingQuality);
-			freerdp_addin_argv_add_argument(args, quality);
+			char quality[64] = { 0 };
+			(void)_snprintf(quality, sizeof(quality), "quality:%" PRIu32,
+			                file->RedirectedVideoCaptureEncodingQuality);
+			if (!freerdp_addin_argv_add_argument(args, quality))
+				status = FALSE;
 		}
 
 		cnv.c = args->argv;
-		const BOOL status = freerdp_client_add_dynamic_channel(settings, args->argc, cnv.cc);
+		if (status)
+			status = freerdp_client_add_dynamic_channel(
+			    settings, WINPR_ASSERTING_INT_CAST(size_t, args->argc), cnv.cc);
 		freerdp_addin_argv_free(args);
 		if (!status)
 			return FALSE;
@@ -2388,19 +2479,20 @@ BOOL freerdp_client_populate_settings_from_rdp_file(const rdpFile* file, rdpSett
 #endif
 	}
 
-	if (~((size_t)file->UsbDevicesToRedirect))
+	if ((~((size_t)file->UsbDevicesToRedirect)) && !utils_str_is_empty(file->UsbDevicesToRedirect))
 	{
 #ifdef CHANNEL_URBDRC_CLIENT
 		union
 		{
 			char** c;
-			const char** cc;
+			const char* const* cc;
 		} cnv;
 		ADDIN_ARGV* args = rdp_file_to_args(URBDRC_CHANNEL_NAME, file->UsbDevicesToRedirect);
 		if (!args)
 			return FALSE;
 		cnv.c = args->argv;
-		const BOOL status = freerdp_client_add_dynamic_channel(settings, args->argc, cnv.cc);
+		const BOOL status = freerdp_client_add_dynamic_channel(
+		    settings, WINPR_ASSERTING_INT_CAST(size_t, args->argc), cnv.cc);
 		freerdp_addin_argv_free(args);
 		if (!status)
 			return FALSE;
@@ -2419,45 +2511,42 @@ BOOL freerdp_client_populate_settings_from_rdp_file(const rdpFile* file, rdpSett
 
 	if (~(size_t)file->SelectedMonitors)
 	{
-		size_t count = 0, x;
-		char** args = CommandLineParseCommaSeparatedValues(file->SelectedMonitors, &count);
-		UINT32* list;
+		size_t count = 0;
+		char** ptr = CommandLineParseCommaSeparatedValues(file->SelectedMonitors, &count);
+		UINT32* list = NULL;
 
 		if (!freerdp_settings_set_pointer_len(settings, FreeRDP_MonitorIds, NULL, count))
 		{
-			free(args);
+			CommandLineParserFree(ptr);
 			return FALSE;
 		}
 		list = freerdp_settings_get_pointer_writable(settings, FreeRDP_MonitorIds);
 		if (!list && (count > 0))
 		{
-			free(args);
+			CommandLineParserFree(ptr);
 			return FALSE;
 		}
-		for (x = 0; x < count; x++)
+		for (size_t x = 0; x < count; x++)
 		{
-			unsigned long val;
+			unsigned long val = 0;
 			errno = 0;
-			val = strtoul(args[x], NULL, 0);
+			val = strtoul(ptr[x], NULL, 0);
 			if ((val >= UINT32_MAX) && (errno != 0))
 			{
-				free(args);
+				CommandLineParserFree(ptr);
 				free(list);
 				return FALSE;
 			}
-			list[x] = val;
+			list[x] = (UINT32)val;
 		}
-		free(args);
+		CommandLineParserFree(ptr);
 	}
 
 	if (~file->DynamicResolution)
 	{
 		const BOOL val = file->DynamicResolution != 0;
-		if (val)
-		{
-			if (!freerdp_settings_set_bool(settings, FreeRDP_SupportDisplayControl, TRUE))
-				return FALSE;
-		}
+		if (!freerdp_settings_set_bool(settings, FreeRDP_SupportDisplayControl, val))
+			return FALSE;
 		if (!freerdp_settings_set_bool(settings, FreeRDP_DynamicResolutionUpdate, val))
 			return FALSE;
 	}
@@ -2539,11 +2628,10 @@ BOOL freerdp_client_populate_settings_from_rdp_file(const rdpFile* file, rdpSett
 
 static rdpFileLine* freerdp_client_rdp_file_find_line_by_name(const rdpFile* file, const char* name)
 {
-	size_t index;
 	BOOL bFound = FALSE;
 	rdpFileLine* line = NULL;
 
-	for (index = 0; index < file->lineCount; index++)
+	for (size_t index = 0; index < file->lineCount; index++)
 	{
 		line = &(file->lines[index]);
 
@@ -2576,7 +2664,8 @@ const char* freerdp_client_rdp_file_get_string_option(const rdpFile* file, const
 	LPSTR* value = NULL;
 	rdpFileLine* line = NULL;
 
-	if (freerdp_client_rdp_file_find_string_entry((rdpFile*)file, name, &value, &line))
+	rdpFile* wfile = WINPR_CAST_CONST_PTR_AWAY(file, rdpFile*);
+	if (freerdp_client_rdp_file_find_string_entry(wfile, name, &value, &line))
 	{
 		if (value && ~(size_t)(*value))
 			return *value;
@@ -2597,10 +2686,11 @@ int freerdp_client_rdp_file_get_integer_option(const rdpFile* file, const char* 
 	DWORD* value = NULL;
 	rdpFileLine* line = NULL;
 
-	if (freerdp_client_rdp_file_find_integer_entry((rdpFile*)file, name, &value, &line))
+	rdpFile* wfile = WINPR_CAST_CONST_PTR_AWAY(file, rdpFile*);
+	if (freerdp_client_rdp_file_find_integer_entry(wfile, name, &value, &line))
 	{
 		if (value && ~(*value))
-			return *value;
+			return WINPR_ASSERTING_INT_CAST(int, *value);
 		if (line)
 			return (int)line->iValue;
 	}
@@ -2656,8 +2746,7 @@ void freerdp_client_rdp_file_free(rdpFile* file)
 	{
 		if (file->lineCount)
 		{
-			size_t i;
-			for (i = 0; i < file->lineCount; i++)
+			for (size_t i = 0; i < file->lineCount; i++)
 			{
 				free(file->lines[i].name);
 				free(file->lines[i].sValue);
